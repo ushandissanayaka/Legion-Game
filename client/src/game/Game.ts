@@ -6,7 +6,8 @@ import { Lighting } from './Lighting';
 import { GameMap, SPAWN_POSITIONS } from './Map';
 import { PlayerControls, LocalPlayer } from '../player/PlayerControls';
 import { RemotePlayer } from '../player/RemotePlayer';
-import { Weapon } from '../weapons/Weapon';
+import { BotPlayer } from '../player/BotPlayer';
+import { Weapon, WEAPON_DAMAGE } from '../weapons/Weapon';
 import { AudioManager } from '../audio/AudioManager';
 import { Socket } from 'socket.io-client';
 import { SOCKET_EVENTS } from '../types/game';
@@ -41,6 +42,7 @@ export class Game {
   private callbacks: GameCallbacks;
 
   private remotePlayers: Map<string, RemotePlayer> = new Map();
+  private bots: BotPlayer[] = [];
   private container: HTMLElement;
   private roomId: string;
   private localPlayerId: string;
@@ -55,7 +57,8 @@ export class Game {
     roomId: string,
     spawnIndex: number,
     initialPlayers: PlayerState[],
-    callbacks: GameCallbacks
+    callbacks: GameCallbacks,
+    botCount = 0          // number of AI bots to spawn (practice mode)
   ) {
     this.container = container;
     this.socket = socket;
@@ -87,6 +90,11 @@ export class Game {
         this.remotePlayers.set(p.id, rp);
         colorIdx++;
       }
+    }
+
+    // Spawn AI bots (practice mode)
+    for (let i = 0; i < botCount; i++) {
+      this.bots.push(new BotPlayer(i, this.scene.scene));
     }
 
     // Set initial camera position
@@ -150,24 +158,38 @@ export class Game {
     // Scoreboard toggle
     // (handled via keystate read in App.tsx)
 
-    // Shooting
-    if (
-      this.controls.shooting &&
-      this.localPlayer.alive &&
-      this.controls.isPointerLocked
-    ) {
-      const result = this.weapon.tryFire(this.remotePlayers);
+    // Shooting — fires on click (shootPressed latch) or held mouse button
+    const wantFire = (this.controls.shooting || this.controls.shootPressed)
+      && this.localPlayer.alive
+      && this.controls.isPointerLocked;
+    this.controls.shootPressed = false; // consume one-shot latch every frame
+
+    if (wantFire) {
+      const result = this.weapon.tryFire(this.remotePlayers, this.bots);
       if (result) {
         this.callbacks.onAmmoChange(this.weapon.ammo, this.weapon.maxAmmo);
 
-        // Send to server
-        this.socket.emit(SOCKET_EVENTS.PLAYER_SHOOT, {
-          roomId: this.roomId,
-          targetId: result.targetId,
-          origin: { x: result.origin.x, y: result.origin.y, z: result.origin.z },
-          direction: { x: result.direction.x, y: result.direction.y, z: result.direction.z },
-          timestamp: Date.now(),
-        });
+        if (result.hitBotIndex >= 0 && result.hitBotIndex < this.bots.length) {
+          // ── Bot hit — handled entirely client-side ───────────────
+          (window as any).__hudShowHit?.();
+          this.audio.playHit();
+          const bot = this.bots[result.hitBotIndex];
+          const killed = bot.takeDamage(WEAPON_DAMAGE);
+          if (killed) {
+            this.localPlayer.kills += 1;
+            this.callbacks.onKillsChange(this.localPlayer.kills, this.localPlayer.deaths);
+            this.callbacks.onKillFeed(this.localPlayerId, 'You', bot.name);
+          }
+        } else {
+          // ── Remote player hit (or clean miss) — send to server ──
+          this.socket.emit(SOCKET_EVENTS.PLAYER_SHOOT, {
+            roomId: this.roomId,
+            targetId: result.targetId,
+            origin:    { x: result.origin.x,    y: result.origin.y,    z: result.origin.z    },
+            direction: { x: result.direction.x, y: result.direction.y, z: result.direction.z },
+            timestamp: Date.now(),
+          });
+        }
       }
     }
 
@@ -177,6 +199,11 @@ export class Game {
     // Update remote players
     for (const rp of this.remotePlayers.values()) {
       rp.update(dt);
+    }
+
+    // Update bots
+    for (const bot of this.bots) {
+      bot.update(dt);
     }
 
     // Update tab key for scoreboard
@@ -335,6 +362,12 @@ export class Game {
       rp.dispose(this.scene.scene);
     }
     this.remotePlayers.clear();
+
+    // Destroy bots
+    for (const bot of this.bots) {
+      bot.dispose(this.scene.scene);
+    }
+    this.bots = [];
 
     this.scene.dispose();
   }

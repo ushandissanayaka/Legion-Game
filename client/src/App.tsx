@@ -53,6 +53,7 @@ export default function App() {
   const [killFeed, setKillFeed] = useState<KillFeedItem[]>([]);
   const [showScoreboard, setShowScoreboard] = useState(false);
   const [countdown, setCountdown] = useState(3);
+  const [botCount, setBotCount] = useState(0);
 
   // Refs
   const gameRef = useRef<Game | null>(null);
@@ -60,6 +61,7 @@ export default function App() {
   const audioRef = useRef<AudioManager>(new AudioManager());
   const socketRef = useRef<Socket | null>(null);
   const spawnIndexRef = useRef(0);
+  const practiceAutoStartRef = useRef(false);
 
   // ── Socket setup ──────────────────────────────────────────
   useEffect(() => {
@@ -88,6 +90,11 @@ export default function App() {
       spawnIndexRef.current = 0;
       setAppState('LOBBY');
       setIsConnecting(false);
+
+      if (practiceAutoStartRef.current) {
+        practiceAutoStartRef.current = false;
+        socket.emit(SOCKET_EVENTS.START_MATCH, { roomId: r.id });
+      }
     });
 
     socket.on(SOCKET_EVENTS.ROOM_JOINED, ({ player, room: r }: { player: PlayerState; room: RoomState }) => {
@@ -225,10 +232,11 @@ export default function App() {
           }, 4000);
         },
         onRoomUpdate: setRoom,
-      }
+      },
+      botCount
     );
     gameRef.current = game;
-  }, [localPlayer, room]);
+  }, [localPlayer, room, botCount]);
 
   // ── Trigger game start when countdown finishes ───────────
   useEffect(() => {
@@ -254,6 +262,17 @@ export default function App() {
   const handleCreateRoom = (name: string, duration: number) => {
     setError(null);
     setIsConnecting(true);
+    setBotCount(0); // clear bots if normal multiplayer
+    const socket = connectSocket();
+    socketRef.current = socket;
+    socket.emit(SOCKET_EVENTS.CREATE_ROOM, { playerName: name, matchDuration: duration });
+  };
+
+  const handleStartPractice = (name: string, bots: number, duration: number) => {
+    setError(null);
+    setIsConnecting(true);
+    setBotCount(bots);
+    practiceAutoStartRef.current = true;
     const socket = connectSocket();
     socketRef.current = socket;
     socket.emit(SOCKET_EVENTS.CREATE_ROOM, { playerName: name, matchDuration: duration });
@@ -262,6 +281,7 @@ export default function App() {
   const handleJoinRoom = (name: string, roomId: string) => {
     setError(null);
     setIsConnecting(true);
+    setBotCount(0);
     const socket = connectSocket();
     socketRef.current = socket;
     socket.emit(SOCKET_EVENTS.JOIN_ROOM, { roomId, playerName: name });
@@ -323,6 +343,7 @@ export default function App() {
             audio={audioRef.current}
             onCreateRoom={handleCreateRoom}
             onJoinRoom={handleJoinRoom}
+            onStartPractice={handleStartPractice}
             isConnecting={isConnecting}
             error={error}
           />

@@ -1,8 +1,9 @@
 import * as THREE from 'three';
 import type { PlayerState } from '../types/game';
+import { loadPlayerModel } from './ModelLoader';
 
 // ============================================================
-// Remote Player — simple capsule mesh with interpolation
+// Remote Player — GLTF mesh with interpolation
 // ============================================================
 
 // Player slot colors — bold bright for daytime visibility
@@ -12,8 +13,7 @@ const PLAYER_EMISSIVE = [0x880015, 0x003344, 0x554400, 0x003311];
 export class RemotePlayer {
   public id: string;
   public mesh: THREE.Group;
-  private bodyMesh: THREE.Mesh;
-  private headMesh: THREE.Mesh;
+  private model: THREE.Group | null = null;
   private namePlate: THREE.Sprite | null = null;
 
   // Interpolation
@@ -35,49 +35,26 @@ export class RemotePlayer {
     const color = PLAYER_COLORS[colorIndex % PLAYER_COLORS.length];
     const emissive = PLAYER_EMISSIVE[colorIndex % PLAYER_EMISSIVE.length];
 
-    const mat = new THREE.MeshLambertMaterial({ color, emissive, emissiveIntensity: 0.5 });
-
-    // Legs
-    const legs = new THREE.Mesh(
-      new THREE.BoxGeometry(0.5, 0.7, 0.35),
-      new THREE.MeshLambertMaterial({ color: 0x2d3a50 }) // dark blue trousers
-    );
-    legs.position.y = 0.35;
-    this.mesh.add(legs);
-
-    // Body (torso)
-    this.bodyMesh = new THREE.Mesh(
-      new THREE.BoxGeometry(0.55, 0.75, 0.40),
-      mat
-    );
-    this.bodyMesh.position.y = 1.1;
-    this.mesh.add(this.bodyMesh);
-
-    // Left arm
-    const armL = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.60, 0.22), mat);
-    armL.position.set(-0.37, 1.05, 0);
-    this.mesh.add(armL);
-
-    // Right arm
-    const armR = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.60, 0.22), mat);
-    armR.position.set( 0.37, 1.05, 0);
-    this.mesh.add(armR);
-
-    // Head (box — blocky look)
-    this.headMesh = new THREE.Mesh(
-      new THREE.BoxGeometry(0.50, 0.50, 0.45),
-      new THREE.MeshLambertMaterial({ color, emissive, emissiveIntensity: 0.7 })
-    );
-    this.headMesh.position.y = 1.75;
-    this.mesh.add(this.headMesh);
-
-    // Helmet strip
-    const helmet = new THREE.Mesh(
-      new THREE.BoxGeometry(0.52, 0.10, 0.47),
-      new THREE.MeshLambertMaterial({ color: 0x1a1a2a })
-    );
-    helmet.position.y = 1.95;
-    this.mesh.add(helmet);
+    // Load 3D model
+    loadPlayerModel((model) => {
+      this.model = model;
+      
+      // Tint the model's materials to match player color
+      model.traverse((child) => {
+        if ((child as THREE.Mesh).isMesh) {
+          const m = child as THREE.Mesh;
+          if (m.material) {
+            // Clone material so we don't tint every player the same color
+            m.material = (m.material as THREE.Material).clone();
+            if ('color' in m.material) {
+              (m.material as any).color.setHex(color);
+            }
+          }
+        }
+      });
+      
+      this.mesh.add(model);
+    });
 
     // Nametag using sprite
     this.createNameTag(state.name);
