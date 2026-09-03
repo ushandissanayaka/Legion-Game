@@ -146,7 +146,7 @@ export default function App() {
       gameRef.current = null;
     });
 
-    // ── Error ────────────────────────────────────────────────
+    // ── Error 
     socket.on(SOCKET_EVENTS.ERROR, ({ message }: { message: string }) => {
       setError(message);
       setIsConnecting(false);
@@ -169,7 +169,7 @@ export default function App() {
     };
   }, []);
 
-  // ── Scoreboard key listener ──────────────────────────────
+  // ── Scoreboard key listener 
   useEffect(() => {
     if (appState !== 'PLAYING') return;
     const onKeyDown = (e: KeyboardEvent) => {
