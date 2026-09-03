@@ -152,6 +152,10 @@ export default function App() {
       setIsConnecting(false);
     });
 
+
+
+
+    
     return () => {
       socket.off('connect');
       socket.off('disconnect');
