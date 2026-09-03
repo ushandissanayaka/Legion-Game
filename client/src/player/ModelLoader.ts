@@ -2,7 +2,10 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader';
 
 let cachedPlayerModel: THREE.Group | null = null;
+let cachedEnemyModel: THREE.Group | null = null;
 const loader = new GLTFLoader();
+
+const ENEMY_MODEL_URL = '/low%20poly%20soldier%203d%20model.glb';
 
 export function loadPlayerModel(callback: (model: THREE.Group) => void) {
   if (cachedPlayerModel) {
@@ -29,5 +32,35 @@ export function loadPlayerModel(callback: (model: THREE.Group) => void) {
     callback(model.clone(true));
   }, undefined, (err) => {
     console.error('Failed to load player.glb. Make sure the file exists at public/models/player.glb', err);
+  });
+}
+
+export function loadEnemyModel(callback: (model: THREE.Group) => void) {
+  if (cachedEnemyModel) {
+    callback(cachedEnemyModel.clone(true));
+    return;
+  }
+
+  loader.load(ENEMY_MODEL_URL, (gltf) => {
+    const model = gltf.scene;
+    const bounds = new THREE.Box3().setFromObject(model);
+    const height = bounds.max.y - bounds.min.y;
+    if (height > 0) {
+      model.scale.setScalar(1.8 / height);
+    }
+    model.position.y = -bounds.min.y * model.scale.y;
+    model.rotation.y = Math.PI;
+
+    model.traverse((child) => {
+      if ((child as THREE.Mesh).isMesh) {
+        child.castShadow = true;
+        child.receiveShadow = true;
+      }
+    });
+
+    cachedEnemyModel = model;
+    callback(model.clone(true));
+  }, undefined, (err) => {
+    console.error(`Failed to load enemy model at ${ENEMY_MODEL_URL}`, err);
   });
 }

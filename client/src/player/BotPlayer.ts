@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { loadPlayerModel } from './ModelLoader';
+import { loadEnemyModel } from './ModelLoader';
 import type { MapCollider } from '../game/Map';
 
 // ============================================================
@@ -45,7 +45,6 @@ export class BotPlayer {
   private waypointTimer = 0;
   private yaw: number;
   private model: THREE.Group | null = null;
-  private weapon: THREE.Group;
   private fireCooldown = 1.5;
 
   get position(): THREE.Vector3 {
@@ -66,39 +65,9 @@ export class BotPlayer {
     );
     this.waypoint = this.pickWaypoint();
     this.mesh = new THREE.Group();
-    this.weapon = this.buildWeapon(BOT_COLORS[index % BOT_COLORS.length]);
-    this.mesh.add(this.weapon);
     this.buildMesh(index);
     this.mesh.position.copy(this.pos);
     scene.add(this.mesh);
-  }
-
-  private buildWeapon(color: number): THREE.Group {
-    const weapon = new THREE.Group();
-    const gunMaterial = new THREE.MeshLambertMaterial({ color: 0x202530 });
-    const handMaterial = new THREE.MeshLambertMaterial({ color: 0xc8956c });
-    const accentMaterial = new THREE.MeshLambertMaterial({ color, emissive: color, emissiveIntensity: 0.35 });
-
-    const gun = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.16, 0.75), gunMaterial);
-    gun.position.set(0.32, 1.25, 0.38);
-    weapon.add(gun);
-
-    const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.35, 8), gunMaterial);
-    barrel.rotation.x = Math.PI / 2;
-    barrel.position.set(0.32, 1.25, 0.9);
-    weapon.add(barrel);
-
-    const handFront = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 0.12), handMaterial);
-    handFront.position.set(0.32, 1.12, 0.52);
-    weapon.add(handFront);
-    const handRear = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 0.12), handMaterial);
-    handRear.position.set(0.32, 1.14, 0.18);
-    weapon.add(handRear);
-
-    const sight = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.04, 0.3), accentMaterial);
-    sight.position.set(0.32, 1.35, 0.38);
-    weapon.add(sight);
-    return weapon;
   }
 
   private pickWaypoint(): THREE.Vector3 {
@@ -113,7 +82,7 @@ export class BotPlayer {
   private buildMesh(index: number): void {
     const color = BOT_COLORS[index % BOT_COLORS.length];
 
-    loadPlayerModel((model) => {
+    loadEnemyModel((model) => {
       this.model = model;
       
       // Tint the model's materials to match bot color
