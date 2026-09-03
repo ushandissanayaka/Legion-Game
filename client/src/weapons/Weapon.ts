@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { Camera } from '../game/Camera';
 import { RemotePlayer } from '../player/RemotePlayer';
+import type { BotPlayer } from '../player/BotPlayer';
 import { Lighting } from '../game/Lighting';
 import { AudioManager } from '../audio/AudioManager';
 
@@ -10,11 +11,12 @@ import { AudioManager } from '../audio/AudioManager';
 
 const FIRE_COOLDOWN = 0.15; // seconds between shots
 const MAX_AMMO = 30;
-const WEAPON_DAMAGE = 25;
+export const WEAPON_DAMAGE = 25;
 
 export interface ShotResult {
   hit: boolean;
   targetId: string | null;
+  hitBotIndex: number; // -1 means no bot was hit
   origin: THREE.Vector3;
   direction: THREE.Vector3;
 }
@@ -136,52 +138,58 @@ export class Weapon {
   }
 
 
-  tryFire(remotePlayers: Map<string, RemotePlayer>): ShotResult | null {
+  tryFire(remotePlayers: Map<string, RemotePlayer>, bots: BotPlayer[] = []): ShotResult | null {
     if (this.fireCooldown > 0 || this.ammo <= 0) return null;
 
     this.fireCooldown = FIRE_COOLDOWN;
     this.ammo = Math.max(0, this.ammo - 1);
     this.recoilTarget = 1;
-
-    // Audio
     this.audio.playShoot();
 
-    // Muzzle flash
-    const barrelTip = this.weaponGroup.position.clone().add(
-      this.camera.getLookDirection().multiplyScalar(0.3)
+    // Muzzle flash at barrel tip
+    const barrelTip = this.camera.camera.position.clone().add(
+      this.camera.getLookDirection().multiplyScalar(0.5)
     );
     this.lighting.createMuzzleFlash(barrelTip, this.scene);
 
-    // Raycast
-    const origin = this.camera.camera.position.clone();
-    const direction = this.camera.getLookDirection();
+    const origin    = this.camera.camera.position.clone();
+    const direction = this.camera.getLookDirection().normalize();
+    const raycaster = new THREE.Raycaster(origin, direction, 0.1, 200);
 
-    const raycaster = new THREE.Raycaster(origin, direction, 0.1, 150);
-
-    // Test against remote players
-    let closestDist = Infinity;
+    let closestDist  = Infinity;
     let hitPlayerId: string | null = null;
+    let hitBotIndex  = -1;
 
-    for (const [id, rp] of remotePlayers.entries()) {
+    // ── Check remote players (mesh-accurate raycasting) ────────
+    for (const [id, rp] of remotePlayers) {
       if (!rp.alive) continue;
+      const meshes: THREE.Object3D[] = [];
+      rp.mesh.traverse(obj => { if (obj instanceof THREE.Mesh) meshes.push(obj); });
+      const hits = raycaster.intersectObjects(meshes, false);
+      if (hits.length > 0 && hits[0].distance < closestDist) {
+        closestDist  = hits[0].distance;
+        hitPlayerId  = id;
+        hitBotIndex  = -1;
+      }
+    }
 
-      // Create a temporary sphere at player position for hit testing
-      const playerCenter = rp.mesh.position.clone().add(new THREE.Vector3(0, 1.0, 0));
-      const diff = playerCenter.clone().sub(origin);
-      const t = diff.dot(direction);
-      if (t < 0) continue;
-      const closest = origin.clone().add(direction.clone().multiplyScalar(t));
-      const dist = closest.distanceTo(playerCenter);
-
-      if (dist < 0.75 && t < closestDist) {
-        closestDist = t;
-        hitPlayerId = id;
+    // ── Check bots (mesh-accurate raycasting) ──────────────────
+    for (let i = 0; i < bots.length; i++) {
+      if (!bots[i].alive) continue;
+      const meshes: THREE.Object3D[] = [];
+      bots[i].mesh.traverse(obj => { if (obj instanceof THREE.Mesh) meshes.push(obj); });
+      const hits = raycaster.intersectObjects(meshes, false);
+      if (hits.length > 0 && hits[0].distance < closestDist) {
+        closestDist = hits[0].distance;
+        hitBotIndex = i;
+        hitPlayerId = null;
       }
     }
 
     return {
-      hit: hitPlayerId !== null,
+      hit: hitPlayerId !== null || hitBotIndex >= 0,
       targetId: hitPlayerId,
+      hitBotIndex,
       origin,
       direction,
     };

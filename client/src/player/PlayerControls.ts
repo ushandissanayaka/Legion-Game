@@ -23,12 +23,14 @@ export class PlayerControls {
   constructor() {
     this.onKeyDown = (e: KeyboardEvent) => {
       this.keys[e.code] = true;
-      this.tabPressed = e.code === 'Tab';
-      if (e.code === 'Tab') e.preventDefault();
+      this.keys[e.key.toLowerCase()] = true;
+      this.tabPressed = e.code === 'Tab' || e.key === 'Tab';
+      if (e.code === 'Tab' || e.key === 'Tab') e.preventDefault();
     };
     this.onKeyUp = (e: KeyboardEvent) => {
       this.keys[e.code] = false;
-      if (e.code === 'Tab') this.tabPressed = false;
+      this.keys[e.key.toLowerCase()] = false;
+      if (e.code === 'Tab' || e.key === 'Tab') this.tabPressed = false;
     };
     this.onMouseMove = (e: MouseEvent) => {
       if (this.isPointerLocked) {
@@ -86,12 +88,12 @@ export class PlayerControls {
 // Local Player — position, movement, AABB collision
 // ============================================================
 
-const PLAYER_SPEED     = 6.5;
-const PLAYER_SPRINT    = 10;
-const PLAYER_HALF_W    = 0.4;
-const PLAYER_HALF_D    = 0.4;
-const PLAYER_HEIGHT    = 1.8;
-const MAP_BOUNDARY     = 30;
+const PLAYER_SPEED = 6.5;
+const PLAYER_SPRINT = 14;
+const PLAYER_HALF_W = 0.4;
+const PLAYER_HALF_D = 0.4;
+const PLAYER_HEIGHT = 1.8;
+const MAP_BOUNDARY = 30;
 
 export class LocalPlayer {
   public position: THREE.Vector3;
@@ -113,15 +115,15 @@ export class LocalPlayer {
   ): void {
     if (!this.alive) return;
 
-    const isSprinting = keys['ShiftLeft'] || keys['ShiftRight'];
+    const isSprinting = keys['ShiftLeft'] || keys['ShiftRight'] || keys['shift'];
     const speed = isSprinting ? PLAYER_SPRINT : PLAYER_SPEED;
 
     const moveDir = new THREE.Vector3();
 
-    if (keys['KeyW'] || keys['ArrowUp'])    moveDir.add(forward);
-    if (keys['KeyS'] || keys['ArrowDown'])  moveDir.sub(forward);
-    if (keys['KeyA'] || keys['ArrowLeft'])  moveDir.sub(right);
-    if (keys['KeyD'] || keys['ArrowRight']) moveDir.add(right);
+    if (keys['KeyW'] || keys['ArrowUp'] || keys['w']) moveDir.add(forward);
+    if (keys['KeyS'] || keys['ArrowDown'] || keys['s']) moveDir.sub(forward);
+    if (keys['KeyA'] || keys['ArrowLeft'] || keys['a']) moveDir.sub(right);
+    if (keys['KeyD'] || keys['ArrowRight'] || keys['d']) moveDir.add(right);
 
     if (moveDir.lengthSq() > 0) {
       moveDir.normalize().multiplyScalar(speed * dt);
