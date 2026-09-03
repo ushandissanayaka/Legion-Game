@@ -142,13 +142,15 @@ export function registerSocketHandlers(
     const room = gameManager.getRoom(roomId);
     if (!room) return;
 
-    playerManager.updatePosition(socket.id, position, rotation);
+    const accepted = playerManager.updatePosition(socket.id, position, rotation);
+    const player = playerManager.getPlayer(socket.id);
+    if (!accepted || !player) return;
 
     // Broadcast to others in room (not sender)
     socket.to(roomId).emit(SOCKET_EVENTS.PLAYER_POSITION, {
       playerId: socket.id,
-      position,
-      rotation,
+      position: player.position,
+      rotation: player.rotation,
     });
   });
 

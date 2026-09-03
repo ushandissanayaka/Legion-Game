@@ -82,10 +82,10 @@ export const SOCKET_EVENTS = {
 
 // Spawn positions for the map (4 corners)
 export const SPAWN_POSITIONS: Vector3Data[] = [
-  { x: -22, y: 1, z: -22 },
-  { x:  22, y: 1, z: -22 },
-  { x: -22, y: 1, z:  22 },
-  { x:  22, y: 1, z:  22 },
+  { x: -28, y: 0, z: -28 },
+  { x:  28, y: 0, z: -28 },
+  { x: -28, y: 0, z:  28 },
+  { x:  28, y: 0, z:  28 },
 ];
 
 export const WEAPON_DAMAGE = 25;

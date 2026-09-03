@@ -159,7 +159,8 @@ export class Game {
     if (this.localPlayer.alive) {
       const forward = this.camera.getForwardXZ();
       const right   = this.camera.getRightXZ();
-      this.localPlayer.move(forward, right, this.controls.keys, dt, this.map.colliders);
+      this.localPlayer.move(forward, right, this.controls.keys, dt, this.map.colliders, this.controls.jumpPressed);
+      this.controls.jumpPressed = false;
     }
 
     // ── Weapon switching (keys 1, 2, 3) ─────────────────────
@@ -228,7 +229,7 @@ export class Game {
 
     // Update bots
     for (const bot of this.bots) {
-      bot.update(dt);
+      bot.update(dt, this.map.colliders);
     }
 
     // Practice bots fire at the nearest living player or bot.

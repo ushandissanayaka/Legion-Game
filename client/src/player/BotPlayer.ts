@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { loadPlayerModel } from './ModelLoader';
+import type { MapCollider } from '../game/Map';
 
 // ============================================================
 // BotPlayer — AI opponent for solo practice mode
@@ -155,7 +156,7 @@ export class BotPlayer {
     this.mesh.add(sprite);
   }
 
-  update(dt: number): void {
+  update(dt: number, colliders: MapCollider[] = []): void {
     if (!this.alive) {
       this.respawnTimer -= dt;
       if (this.respawnTimer <= 0) this.doRespawn();
@@ -173,8 +174,14 @@ export class BotPlayer {
     const dir = this.waypoint.clone().sub(this.pos).setY(0);
     if (dir.lengthSq() > 0.01) {
       dir.normalize();
-      this.pos.addScaledVector(dir, this.speed * dt);
-      this.yaw = Math.atan2(dir.x, dir.z);
+      const nextPosition = this.pos.clone().addScaledVector(dir, this.speed * dt);
+      if (!this.collidesWithMap(nextPosition, colliders)) {
+        this.pos.copy(nextPosition);
+        this.yaw = Math.atan2(dir.x, dir.z);
+      } else {
+        this.waypoint.copy(this.pickWaypoint());
+        this.waypointTimer = 0;
+      }
     }
 
     // Clamp within arena walls
@@ -192,6 +199,19 @@ export class BotPlayer {
     }
 
     this.fireCooldown = Math.max(0, this.fireCooldown - dt);
+  }
+
+  private collidesWithMap(position: THREE.Vector3, colliders: MapCollider[]): boolean {
+    const radius = 0.4;
+    const height = 1.8;
+    return colliders.some(collider =>
+      position.x + radius > collider.min.x &&
+      position.x - radius < collider.max.x &&
+      position.y + height > collider.min.y &&
+      position.y < collider.max.y &&
+      position.z + radius > collider.min.z &&
+      position.z - radius < collider.max.z
+    );
   }
 
   tryShoot(targets: BotTarget[]): BotTarget | null {
