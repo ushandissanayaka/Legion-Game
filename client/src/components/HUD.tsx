@@ -216,7 +216,7 @@ export const HUD: React.FC<HUDProps> = ({
                   className="health-bar-fill"
                   style={{
                     width: `${health}%`,
-                    backgroundColor: getHealthColor(health),
+                    backgroundColor: '#ff2d55',
                     transition: 'width 0.2s, background-color 0.3s',
                   }}
                 />

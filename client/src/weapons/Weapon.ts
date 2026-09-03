@@ -354,6 +354,13 @@ export class Weapon {
     this.audio.playReload();
   }
 
+  refillMagazine(): void {
+    this.isReloading = false;
+    this.reloadTimer = 0;
+    this.ammo = this.config.magazineSize;
+    this.maxAmmo = this.config.magazineSize;
+  }
+
   get isCurrentlyReloading(): boolean {
     return this.isReloading;
   }
