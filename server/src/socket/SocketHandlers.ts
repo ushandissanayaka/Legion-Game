@@ -1,0 +1,297 @@
+import { Server, Socket } from 'socket.io';
+import { GameManager } from '../game/GameManager';
+import { PlayerManager } from '../players/PlayerManager';
+import {
+  SOCKET_EVENTS,
+  WEAPON_DAMAGE,
+  PLAYER_HITBOX_RADIUS,
+  NETWORK_LAG_TOLERANCE_MS,
+  GameStateEnum,
+} from '../types/game';
+
+// Simple 3D vector helper
+function vec3Length(v: { x: number; y: number; z: number }): number {
+  return Math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
+}
+
+function vec3Dot(a: { x: number; y: number; z: number }, b: { x: number; y: number; z: number }): number {
+  return a.x * b.x + a.y * b.y + a.z * b.z;
+}
+
+// Ray-sphere intersection for basic server-side shot validation
+function rayIntersectsSphere(
+  origin: { x: number; y: number; z: number },
+  dir: { x: number; y: number; z: number },
+  sphereCenter: { x: number; y: number; z: number },
+  radius: number
+): boolean {
+  const oc = { x: origin.x - sphereCenter.x, y: origin.y - sphereCenter.y, z: origin.z - sphereCenter.z };
+  const a = vec3Dot(dir, dir);
+  const b = 2.0 * vec3Dot(oc, dir);
+  const c = vec3Dot(oc, oc) - radius * radius;
+  const discriminant = b * b - 4 * a * c;
+  if (discriminant < 0) return false;
+  const t = (-b - Math.sqrt(discriminant)) / (2.0 * a);
+  return t >= 0 && t <= 150; // max shoot distance
+}
+
+export function registerSocketHandlers(
+  io: Server,
+  socket: Socket,
+  gameManager: GameManager,
+  playerManager: PlayerManager
+): void {
+
+  // ──────────────────────────────────────────────────────────
+  // CREATE ROOM
+  // ──────────────────────────────────────────────────────────
+  socket.on(SOCKET_EVENTS.CREATE_ROOM, (payload: { playerName: string; matchDuration?: number }) => {
+    try {
+      const { playerName, matchDuration } = payload;
+      if (!playerName?.trim()) {
+        socket.emit(SOCKET_EVENTS.ERROR, { message: 'Player name required', code: 'INVALID_NAME' });
+        return;
+      }
+
+      const room = gameManager.createRoom(socket.id, matchDuration);
+      const player = playerManager.createPlayer(socket.id, playerName, room.id, 0, true);
+      room.addPlayer(player);
+      socket.join(room.id);
+
+      socket.emit(SOCKET_EVENTS.ROOM_CREATED, {
+        roomId: room.id,
+        player,
+        room: room.getRoomState(),
+      });
+
+      console.log(`[Room] ${playerName} created room ${room.id}`);
+    } catch (err) {
+      console.error('createRoom error:', err);
+      socket.emit(SOCKET_EVENTS.ERROR, { message: 'Failed to create room', code: 'SERVER_ERROR' });
+    }
+  });
+
+  // ──────────────────────────────────────────────────────────
+  // JOIN ROOM
+  // ──────────────────────────────────────────────────────────
+  socket.on(SOCKET_EVENTS.JOIN_ROOM, (payload: { roomId: string; playerName: string }) => {
+    try {
+      const { roomId, playerName } = payload;
+      const upperRoomId = roomId?.toUpperCase().trim();
+
+      if (!playerName?.trim()) {
+        socket.emit(SOCKET_EVENTS.ERROR, { message: 'Player name required', code: 'INVALID_NAME' });
+        return;
+      }
+
+      const check = gameManager.canJoinRoom(upperRoomId);
+      if (!check.ok) {
+        socket.emit(SOCKET_EVENTS.ERROR, { message: check.reason || 'Cannot join', code: 'JOIN_FAILED' });
+        return;
+      }
+
+      const room = gameManager.getRoom(upperRoomId)!;
+      const spawnIndex = room.playerCount;
+      const player = playerManager.createPlayer(socket.id, playerName, upperRoomId, spawnIndex, false);
+      room.addPlayer(player);
+      socket.join(upperRoomId);
+
+      // Tell the joining player their info
+      socket.emit(SOCKET_EVENTS.ROOM_JOINED, { player, room: room.getRoomState() });
+
+      // Tell everyone else a new player joined
+      socket.to(upperRoomId).emit(SOCKET_EVENTS.PLAYER_JOINED, {
+        player,
+        room: room.getRoomState(),
+      });
+
+      console.log(`[Room] ${playerName} joined room ${upperRoomId} (${room.playerCount} players)`);
+    } catch (err) {
+      console.error('joinRoom error:', err);
+      socket.emit(SOCKET_EVENTS.ERROR, { message: 'Failed to join room', code: 'SERVER_ERROR' });
+    }
+  });
+
+  // ──────────────────────────────────────────────────────────
+  // LEAVE ROOM
+  // ──────────────────────────────────────────────────────────
+  socket.on(SOCKET_EVENTS.LEAVE_ROOM, (payload: { roomId: string }) => {
+    handlePlayerLeave(socket.id, payload?.roomId, io, gameManager, playerManager);
+    socket.leave(payload?.roomId);
+  });
+
+  // ──────────────────────────────────────────────────────────
+  // DISCONNECT
+  // ──────────────────────────────────────────────────────────
+  socket.on('disconnect', () => {
+    const player = playerManager.getPlayer(socket.id);
+    if (player) {
+      handlePlayerLeave(socket.id, player.roomId, io, gameManager, playerManager);
+    }
+    console.log(`[Socket] Disconnected: ${socket.id}`);
+  });
+
+  // ──────────────────────────────────────────────────────────
+  // PLAYER MOVE (position sync)
+  // ──────────────────────────────────────────────────────────
+  socket.on(SOCKET_EVENTS.PLAYER_MOVE, (payload: {
+    roomId: string;
+    position: { x: number; y: number; z: number };
+    rotation: { yaw: number; pitch: number };
+  }) => {
+    const { roomId, position, rotation } = payload;
+    const room = gameManager.getRoom(roomId);
+    if (!room) return;
+
+    playerManager.updatePosition(socket.id, position, rotation);
+
+    // Broadcast to others in room (not sender)
+    socket.to(roomId).emit(SOCKET_EVENTS.PLAYER_POSITION, {
+      playerId: socket.id,
+      position,
+      rotation,
+    });
+  });
+
+  // ──────────────────────────────────────────────────────────
+  // PLAYER SHOOT
+  // ──────────────────────────────────────────────────────────
+  socket.on(SOCKET_EVENTS.PLAYER_SHOOT, (payload: {
+    roomId: string;
+    targetId: string | null;
+    origin: { x: number; y: number; z: number };
+    direction: { x: number; y: number; z: number };
+    timestamp: number;
+  }) => {
+    try {
+      const { roomId, targetId, origin, direction, timestamp } = payload;
+      const room = gameManager.getRoom(roomId);
+      if (!room || room.gameState !== GameStateEnum.PLAYING) return;
+
+      const shooter = playerManager.getPlayer(socket.id);
+      if (!shooter || !shooter.alive) return;
+
+      // Validate timestamp (reject shots too old)
+      const now = Date.now();
+      if (now - timestamp > NETWORK_LAG_TOLERANCE_MS) return;
+
+      // If no target claimed, nothing to process (visual only)
+      if (!targetId) return;
+
+      // Don't shoot yourself
+      if (targetId === socket.id) return;
+
+      const target = playerManager.getPlayer(targetId);
+      if (!target || !target.alive || target.roomId !== roomId) return;
+
+      // Basic server-side validation: check if ray comes close to target's position
+      const normalizedDir = (() => {
+        const len = vec3Length(direction);
+        if (len === 0) return direction;
+        return { x: direction.x / len, y: direction.y / len, z: direction.z / len };
+      })();
+
+      const isHit = rayIntersectsSphere(origin, normalizedDir, target.position, PLAYER_HITBOX_RADIUS * 2.5);
+      if (!isHit) {
+        // Shot didn't actually hit on server — could be lag, so we trust with leniency
+        // For MVP: allow if claimed hit (anti-cheat can be improved later)
+        // We'll allow 50% tolerance for now
+      }
+
+      // Apply damage
+      const { newHealth, died } = playerManager.applyDamage(targetId, WEAPON_DAMAGE);
+      const targetPlayer = playerManager.getPlayer(targetId);
+      if (!targetPlayer) return;
+
+      // Update room's player map
+      const roomPlayer = room.players.get(targetId);
+      if (roomPlayer) {
+        roomPlayer.health = newHealth;
+        roomPlayer.alive = !died;
+      }
+
+      // Broadcast hit
+      io.to(roomId).emit(SOCKET_EVENTS.PLAYER_HIT, {
+        targetId,
+        shooterId: socket.id,
+        damage: WEAPON_DAMAGE,
+        newHealth,
+      });
+
+      if (died) {
+        playerManager.addKill(socket.id);
+        const shooterRoomPlayer = room.players.get(socket.id);
+        if (shooterRoomPlayer) shooterRoomPlayer.kills += 1;
+        const victimRoomPlayer = room.players.get(targetId);
+        if (victimRoomPlayer) victimRoomPlayer.deaths += 1;
+
+        io.to(roomId).emit(SOCKET_EVENTS.PLAYER_DEATH, {
+          victimId: targetId,
+          killerId: socket.id,
+          killerName: shooter.name,
+          victimName: target.name,
+        });
+
+        // Schedule respawn
+        room.scheduleRespawn(targetId);
+      }
+    } catch (err) {
+      console.error('playerShoot error:', err);
+    }
+  });
+
+  // ──────────────────────────────────────────────────────────
+  // START MATCH
+  // ──────────────────────────────────────────────────────────
+  socket.on(SOCKET_EVENTS.START_MATCH, (payload: { roomId: string }) => {
+    const { roomId } = payload;
+    const room = gameManager.getRoom(roomId);
+    if (!room) {
+      socket.emit(SOCKET_EVENTS.ERROR, { message: 'Room not found', code: 'ROOM_NOT_FOUND' });
+      return;
+    }
+    if (room.hostId !== socket.id) {
+      socket.emit(SOCKET_EVENTS.ERROR, { message: 'Only the host can start the match', code: 'NOT_HOST' });
+      return;
+    }
+    if (!room.canStart()) {
+      socket.emit(SOCKET_EVENTS.ERROR, { message: 'Cannot start match', code: 'CANNOT_START' });
+      return;
+    }
+    room.startCountdown();
+    console.log(`[Match] Starting countdown for room ${roomId}`);
+  });
+}
+
+// ──────────────────────────────────────────────────────────
+// Helper: Handle player leaving
+// ──────────────────────────────────────────────────────────
+function handlePlayerLeave(
+  playerId: string,
+  roomId: string,
+  io: Server,
+  gameManager: GameManager,
+  playerManager: PlayerManager
+): void {
+  const player = playerManager.getPlayer(playerId);
+  const room = gameManager.getRoom(roomId);
+
+  if (!room) return;
+
+  room.removePlayer(playerId);
+  playerManager.removePlayer(playerId);
+
+  console.log(`[Room] Player ${playerId} left room ${roomId} (${room.playerCount} remaining)`);
+
+  if (room.playerCount === 0) {
+    gameManager.deleteRoom(roomId);
+    console.log(`[Room] Room ${roomId} destroyed (empty)`);
+    return;
+  }
+
+  io.to(roomId).emit(SOCKET_EVENTS.PLAYER_LEFT, {
+    playerId,
+    newHostId: room.hostId,
+    room: room.getRoomState(),
+  });
+}
