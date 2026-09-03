@@ -7,7 +7,8 @@ import { GameMap, SPAWN_POSITIONS } from './Map';
 import { PlayerControls, LocalPlayer } from '../player/PlayerControls';
 import { RemotePlayer } from '../player/RemotePlayer';
 import { BotPlayer } from '../player/BotPlayer';
-import { Weapon, WEAPON_DAMAGE } from '../weapons/Weapon';
+import { Weapon, WEAPON_CONFIGS } from '../weapons/Weapon';
+import type { WeaponType } from '../weapons/Weapon';
 import { AudioManager } from '../audio/AudioManager';
 import { Socket } from 'socket.io-client';
 import { SOCKET_EVENTS } from '../types/game';
@@ -24,6 +25,7 @@ export interface GameCallbacks {
   onKillsChange: (kills: number, deaths: number) => void;
   onPointerLockChange: (locked: boolean) => void;
   onAliveChange: (alive: boolean) => void;
+  onWeaponChange: (weapon: WeaponType) => void;
   onKillFeed: (killerId: string, killerName: string, victimName: string) => void;
   onRoomUpdate: (room: RoomState) => void;
 }
@@ -49,6 +51,10 @@ export class Game {
   private spawnIndex: number;
   private isRunning = false;
 
+  // Network throttle
+  private networkTimer = 0;
+  private readonly NETWORK_HZ = 25; // send position 25 times/sec
+
   constructor(
     container: HTMLElement,
     socket: Socket,
@@ -58,7 +64,8 @@ export class Game {
     spawnIndex: number,
     initialPlayers: PlayerState[],
     callbacks: GameCallbacks,
-    botCount = 0          // number of AI bots to spawn (practice mode)
+    botCount = 0,
+    initialWeapon: WeaponType = 'assault'
   ) {
     this.container = container;
     this.socket = socket;
@@ -79,10 +86,10 @@ export class Game {
     const spawnPos = SPAWN_POSITIONS[spawnIndex % SPAWN_POSITIONS.length];
     this.localPlayer = new LocalPlayer(spawnPos);
 
-    // Weapon
-    this.weapon = new Weapon(this.scene.scene, this.camera, this.lighting, audio);
+    // Weapon — use the weapon selected from the main menu
+    this.weapon = new Weapon(this.scene.scene, this.camera, this.lighting, audio, initialWeapon);
 
-    // Add remote players that are already in room
+    // Add remote players already in room
     let colorIdx = 0;
     for (const p of initialPlayers) {
       if (p.id !== localPlayerId) {
@@ -115,6 +122,10 @@ export class Game {
     );
     this.isRunning = true;
     this.gameLoop.start();
+
+    // Notify initial weapon state
+    this.callbacks.onAmmoChange(this.weapon.ammo, this.weapon.maxAmmo);
+    this.callbacks.onWeaponChange(this.weapon.currentType);
   }
 
   private handleContainerClick = () => {
@@ -141,6 +152,7 @@ export class Game {
 
     // Update camera rotation
     this.camera.updateFromPosition(this.localPlayer.position);
+    this.camera.updateZoom(this.controls.aiming, dt);
 
     // Player movement
     if (this.localPlayer.alive) {
@@ -149,20 +161,30 @@ export class Game {
       this.localPlayer.move(forward, right, this.controls.keys, dt, this.map.colliders);
     }
 
-    // Reload
-    if (this.controls.keys['KeyR']) {
-      this.weapon.reload();
+    // ── Weapon switching (keys 1, 2, 3) ─────────────────────
+    const wantSwitch =
+      this.controls.keys['Digit1'] ? 'assault' :
+      this.controls.keys['Digit2'] ? 'shotgun'  :
+      this.controls.keys['Digit3'] ? 'sniper'   : null;
+
+    if (wantSwitch && wantSwitch !== this.weapon.currentType) {
+      this.weapon.switchTo(wantSwitch as WeaponType);
       this.callbacks.onAmmoChange(this.weapon.ammo, this.weapon.maxAmmo);
+      this.callbacks.onWeaponChange(this.weapon.currentType);
     }
 
-    // Scoreboard toggle
-    // (handled via keystate read in App.tsx)
+    // ── Reload (R key) ──────────────────────────────────────
+    if (this.controls.keys['KeyR'] && !this.weapon.isCurrentlyReloading) {
+      this.weapon.reload();
+    }
 
-    // Shooting — fires on click (shootPressed latch) or held mouse button
-    const wantFire = (this.controls.shooting || this.controls.shootPressed)
+    // ── Shooting ────────────────────────────────────────────
+    // Auto-fire for assault rifle (hold), single for shotgun/sniper (press)
+    const isAutoFire = this.weapon.currentType === 'assault';
+    const wantFire = (isAutoFire ? this.controls.shooting : this.controls.shootPressed)
       && this.localPlayer.alive
       && this.controls.isPointerLocked;
-    this.controls.shootPressed = false; // consume one-shot latch every frame
+    this.controls.shootPressed = false; // consume one-shot latch
 
     if (wantFire) {
       const result = this.weapon.tryFire(this.remotePlayers, this.bots);
@@ -170,30 +192,32 @@ export class Game {
         this.callbacks.onAmmoChange(this.weapon.ammo, this.weapon.maxAmmo);
 
         if (result.hitBotIndex >= 0 && result.hitBotIndex < this.bots.length) {
-          // ── Bot hit — handled entirely client-side ───────────────
+          // Bot hit — handled client-side
           (window as any).__hudShowHit?.();
           this.audio.playHit();
           const bot = this.bots[result.hitBotIndex];
-          const killed = bot.takeDamage(WEAPON_DAMAGE);
+          const killed = bot.takeDamage(result.damage);
           if (killed) {
             this.localPlayer.kills += 1;
             this.callbacks.onKillsChange(this.localPlayer.kills, this.localPlayer.deaths);
             this.callbacks.onKillFeed(this.localPlayerId, 'You', bot.name);
           }
-        } else {
-          // ── Remote player hit (or clean miss) — send to server ──
+        } else if (result.targetId) {
+          // Remote player hit — send to server with weapon type & damage
           this.socket.emit(SOCKET_EVENTS.PLAYER_SHOOT, {
             roomId: this.roomId,
             targetId: result.targetId,
-            origin:    { x: result.origin.x,    y: result.origin.y,    z: result.origin.z    },
+            origin:    { x: result.origin.x,    y: result.origin.y,    z: result.origin.z },
             direction: { x: result.direction.x, y: result.direction.y, z: result.direction.z },
+            weaponType: result.weaponType,
+            damage: result.damage,
             timestamp: Date.now(),
           });
         }
       }
     }
 
-    // Update weapon
+    // Update weapon view model
     this.weapon.update(dt, this.camera.camera.position);
 
     // Update remote players
@@ -205,9 +229,6 @@ export class Game {
     for (const bot of this.bots) {
       bot.update(dt);
     }
-
-    // Update tab key for scoreboard
-    // Pass via callback if needed — done in App.tsx via keydown listener
   }
 
   private sendNetworkUpdate(): void {
@@ -258,7 +279,7 @@ export class Game {
       if (rp) rp.setTargetState(position, rotation);
     });
 
-    // Hit confirmation
+    // Hit confirmation from server
     this.socket.on(SOCKET_EVENTS.PLAYER_HIT, ({
       targetId, newHealth, shooterId
     }: {
@@ -270,6 +291,7 @@ export class Game {
         this.localPlayer.health = newHealth;
         this.callbacks.onHealthChange(newHealth);
         this.audio.playHit();
+        (window as any).__hudShowDamage?.();
       } else if (shooterId === this.localPlayerId) {
         // We hit someone — show hit marker
         (window as any).__hudShowHit?.();
@@ -332,11 +354,6 @@ export class Game {
     });
   }
 
-  /** Returns current key state for scoreboard toggle */
-  get tabPressed(): boolean {
-    return this.controls.keys['Tab'] || false;
-  }
-
   destroy(): void {
     this.isRunning = false;
     this.gameLoop.stop();
@@ -363,7 +380,6 @@ export class Game {
     }
     this.remotePlayers.clear();
 
-    // Destroy bots
     for (const bot of this.bots) {
       bot.dispose(this.scene.scene);
     }

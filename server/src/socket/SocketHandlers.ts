@@ -3,7 +3,6 @@ import { GameManager } from '../game/GameManager';
 import { PlayerManager } from '../players/PlayerManager';
 import {
   SOCKET_EVENTS,
-  WEAPON_DAMAGE,
   PLAYER_HITBOX_RADIUS,
   NETWORK_LAG_TOLERANCE_MS,
   GameStateEnum,
@@ -161,10 +160,22 @@ export function registerSocketHandlers(
     targetId: string | null;
     origin: { x: number; y: number; z: number };
     direction: { x: number; y: number; z: number };
+    weaponType?: string;
+    damage?: number;
     timestamp: number;
   }) => {
     try {
       const { roomId, targetId, origin, direction, timestamp } = payload;
+
+      // Validate and clamp damage per weapon type (server-authoritative)
+      const WEAPON_MAX: Record<string, number> = {
+        assault: 25,
+        shotgun: 18,  // per pellet, 8 pellets = 144 max but single pellet validated
+        sniper: 100,
+      };
+      const claimedDamage = typeof payload.damage === 'number' ? payload.damage : 25;
+      const weaponKey = payload.weaponType && WEAPON_MAX[payload.weaponType] ? payload.weaponType : 'assault';
+      const validatedDamage = Math.min(claimedDamage, WEAPON_MAX[weaponKey]);
       const room = gameManager.getRoom(roomId);
       if (!room || room.gameState !== GameStateEnum.PLAYING) return;
 
@@ -198,8 +209,8 @@ export function registerSocketHandlers(
         // We'll allow 50% tolerance for now
       }
 
-      // Apply damage
-      const { newHealth, died } = playerManager.applyDamage(targetId, WEAPON_DAMAGE);
+      // Apply damage (server-validated amount)
+      const { newHealth, died } = playerManager.applyDamage(targetId, validatedDamage);
       const targetPlayer = playerManager.getPlayer(targetId);
       if (!targetPlayer) return;
 
@@ -214,7 +225,7 @@ export function registerSocketHandlers(
       io.to(roomId).emit(SOCKET_EVENTS.PLAYER_HIT, {
         targetId,
         shooterId: socket.id,
-        damage: WEAPON_DAMAGE,
+        damage: validatedDamage,
         newHealth,
       });
 

@@ -13,6 +13,7 @@ import {
 } from './types/game';
 import type { PlayerState, RoomState } from './types/game';
 import { Socket } from 'socket.io-client';
+import type { WeaponType } from './weapons/Weapon';
 
 // ============================================================
 // App — top-level game state machine
@@ -44,7 +45,7 @@ export default function App() {
   // In-game HUD state (driven by game callbacks, not React game loop)
   const [health, setHealth] = useState(100);
   const [ammo, setAmmo] = useState(30);
-  const [maxAmmo] = useState(30);
+  const [maxAmmo, setMaxAmmo] = useState(30);
   const [kills, setKills] = useState(0);
   const [deaths, setDeaths] = useState(0);
   const [timeRemaining, setTimeRemaining] = useState(300);
@@ -54,6 +55,8 @@ export default function App() {
   const [showScoreboard, setShowScoreboard] = useState(false);
   const [countdown, setCountdown] = useState(3);
   const [botCount, setBotCount] = useState(0);
+  const [weaponType, setWeaponType] = useState<WeaponType>('assault');
+  const [currentWeapon, setCurrentWeapon] = useState<WeaponType>('assault');
 
   // Refs
   const gameRef = useRef<Game | null>(null);
@@ -190,11 +193,13 @@ export default function App() {
     // Reset HUD state
     setHealth(100);
     setAmmo(30);
+    setMaxAmmo(30);
     setKills(0);
     setDeaths(0);
     setKillFeed([]);
     setIsAlive(true);
     setIsPointerLocked(false);
+    setCurrentWeapon(weaponType);
     setAppState('PLAYING');
 
     // Destroy previous game if any
@@ -213,10 +218,11 @@ export default function App() {
       room.players,
       {
         onHealthChange: setHealth,
-        onAmmoChange: (a, m) => setAmmo(a),
+        onAmmoChange: (a, m) => { setAmmo(a); setMaxAmmo(m); },
         onKillsChange: (k, d) => { setKills(k); setDeaths(d); },
         onPointerLockChange: setIsPointerLocked,
         onAliveChange: setIsAlive,
+        onWeaponChange: setCurrentWeapon,
         onKillFeed: (killerId, killerName, victimName) => {
           const isYou = killerId === localPlayer.id;
           const item: KillFeedItem = {
@@ -226,17 +232,17 @@ export default function App() {
             isYou,
           };
           setKillFeed(prev => [item, ...prev.slice(0, 4)]);
-          // Auto-remove after 4s
           setTimeout(() => {
             setKillFeed(prev => prev.filter(f => f.id !== item.id));
           }, 4000);
         },
         onRoomUpdate: setRoom,
       },
-      botCount
+      botCount,
+      weaponType
     );
     gameRef.current = game;
-  }, [localPlayer, room, botCount]);
+  }, [localPlayer, room, botCount, weaponType]);
 
   // ── Trigger game start when countdown finishes ───────────
   useEffect(() => {
@@ -262,16 +268,17 @@ export default function App() {
   const handleCreateRoom = (name: string, duration: number) => {
     setError(null);
     setIsConnecting(true);
-    setBotCount(0); // clear bots if normal multiplayer
+    setBotCount(0);
     const socket = connectSocket();
     socketRef.current = socket;
     socket.emit(SOCKET_EVENTS.CREATE_ROOM, { playerName: name, matchDuration: duration });
   };
 
-  const handleStartPractice = (name: string, bots: number, duration: number) => {
+  const handleStartPractice = (name: string, bots: number, duration: number, gun: WeaponType = 'assault') => {
     setError(null);
     setIsConnecting(true);
     setBotCount(bots);
+    setWeaponType(gun);
     practiceAutoStartRef.current = true;
     const socket = connectSocket();
     socketRef.current = socket;
@@ -307,7 +314,6 @@ export default function App() {
 
   const handlePlayAgain = () => {
     if (room && socketRef.current) {
-      // Return to lobby — server resets
       socketRef.current.emit(SOCKET_EVENTS.LEAVE_ROOM, { roomId: room.id });
       socketRef.current.emit(SOCKET_EVENTS.CREATE_ROOM, { playerName: localPlayer?.name || 'Player' });
     }
@@ -319,19 +325,33 @@ export default function App() {
 
   // ── Click to play ────────────────────────────────────────
   const handleClickToPlay = () => {
-    canvasContainerRef.current?.querySelector('canvas')?.requestPointerLock() ||
-      canvasContainerRef.current?.requestPointerLock();
+    const canvas = canvasContainerRef.current?.querySelector('canvas');
+    const pointerLockTarget = canvas || canvasContainerRef.current;
+
+    if (!pointerLockTarget) return;
+
+    const request = pointerLockTarget.requestPointerLock();
+    if (request) {
+      request.catch(() => {
+        setError('Click the game area to capture your mouse, or allow pointer lock in your browser.');
+      });
+    }
   };
 
   // ── Render ────────────────────────────────────────────────
   return (
     <>
-      {/* Three.js canvas always mounted when in-game */}
+      {/* Vanilla Three.js canvas — always mounted when in-game, hidden otherwise */}
       <div
         id="game-canvas-container"
         ref={canvasContainerRef}
         style={{
           display: appState === 'PLAYING' || appState === 'COUNTDOWN' ? 'block' : 'none',
+          width: '100vw',
+          height: '100vh',
+          position: 'absolute',
+          top: 0,
+          left: 0,
         }}
       />
 
@@ -384,6 +404,7 @@ export default function App() {
               isPointerLocked={isPointerLocked}
               isAlive={isAlive}
               killFeed={killFeed}
+              weaponType={currentWeapon}
               onClickToPlay={handleClickToPlay}
             />
             {showScoreboard && room && localPlayer && (

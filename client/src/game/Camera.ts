@@ -7,6 +7,8 @@ import type { MapCollider } from './Map';
 
 const EYE_HEIGHT = 1.7;
 const VERTICAL_LIMIT = Math.PI / 2 - 0.05; // ~85°
+const DEFAULT_FOV = 75;
+const AIM_FOV = 45;
 
 export class Camera {
   public camera: THREE.PerspectiveCamera;
@@ -31,6 +33,12 @@ export class Camera {
     this.yaw   -= dx * sensitivity;
     this.pitch -= dy * sensitivity;
     this.pitch  = Math.max(-VERTICAL_LIMIT, Math.min(VERTICAL_LIMIT, this.pitch));
+  }
+
+  updateZoom(aiming: boolean, dt: number): void {
+    const targetFov = aiming ? AIM_FOV : DEFAULT_FOV;
+    this.camera.fov += (targetFov - this.camera.fov) * Math.min(dt * 12, 1);
+    this.camera.updateProjectionMatrix();
   }
 
   /** Update camera position from player world position */

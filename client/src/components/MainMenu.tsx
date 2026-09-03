@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import { AudioManager } from '../audio/AudioManager';
+import type { WeaponType } from '../weapons/Weapon';
 
 interface MainMenuProps {
   audio: AudioManager;
   onCreateRoom: (name: string, duration: number) => void;
   onJoinRoom: (name: string, roomId: string) => void;
-  onStartPractice: (name: string, botCount: number, duration: number) => void;
+  onStartPractice: (name: string, botCount: number, duration: number, gun: WeaponType) => void;
   isConnecting: boolean;
   error: string | null;
 }
@@ -19,10 +20,11 @@ export const MainMenu: React.FC<MainMenuProps> = ({
   error,
 }) => {
   const [playerName,    setPlayerName]    = useState('');
-  const [matchDuration, setMatchDuration] = useState(300);
+  const [matchDuration, setMatchDuration] = useState(180);
   const [botCount,      setBotCount]      = useState(5);
   const [joinRoomId,    setJoinRoomId]    = useState('');
   const [tab,           setTab]           = useState<'create' | 'join' | 'practice'>('practice');
+  const [selectedGun,   setSelectedGun]   = useState<WeaponType>('assault');
 
   const handleCreate = () => {
     if (!playerName.trim()) return;
@@ -39,7 +41,7 @@ export const MainMenu: React.FC<MainMenuProps> = ({
   const handlePractice = () => {
     if (!playerName.trim()) return;
     audio.playClick();
-    onStartPractice(playerName.trim(), botCount, matchDuration);
+    onStartPractice(playerName.trim(), botCount, matchDuration, selectedGun);
   };
 
   const handleKey = (e: React.KeyboardEvent) => {
@@ -168,6 +170,49 @@ export const MainMenu: React.FC<MainMenuProps> = ({
             </div>
 
             <DurationSelect />
+
+            {/* Weapon Selection */}
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ display: 'block', marginBottom: 10, fontSize: 14, color: 'var(--text-secondary)' }}>
+                Select Weapon
+              </label>
+              <div style={{ display: 'flex', gap: 8 }}>
+                {([
+                  { id: 'assault' as WeaponType, label: 'Assault Rifle', emoji: '🔫', desc: '25 dmg · Fast' },
+                  { id: 'shotgun' as WeaponType, label: 'Shotgun',       emoji: '💥', desc: '15×8 · Close' },
+                  { id: 'sniper'  as WeaponType, label: 'Sniper',        emoji: '🎯', desc: '100 dmg · Slow' },
+                ] as const).map(g => (
+                  <button
+                    key={g.id}
+                    id={`weapon-${g.id}`}
+                    onClick={() => { setSelectedGun(g.id); audio.playClick(); }}
+                    style={{
+                      flex: 1,
+                      padding: '10px 6px',
+                      borderRadius: 8,
+                      border: selectedGun === g.id
+                        ? '2px solid var(--accent-primary)'
+                        : '2px solid rgba(255,255,255,0.1)',
+                      background: selectedGun === g.id
+                        ? 'rgba(var(--accent-primary-rgb, 255,100,0), 0.15)'
+                        : 'rgba(255,255,255,0.04)',
+                      color: selectedGun === g.id ? 'var(--accent-primary)' : 'var(--text-secondary)',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      gap: 4,
+                      fontFamily: 'var(--font-ui)',
+                      transition: 'all 0.2s',
+                    }}
+                  >
+                    <span style={{ fontSize: 24 }}>{g.emoji}</span>
+                    <span style={{ fontSize: 11, fontWeight: 700 }}>{g.label}</span>
+                    <span style={{ fontSize: 10, opacity: 0.7 }}>{g.desc}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
 
             <button
               id="start-practice-btn"
