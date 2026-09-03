@@ -13,6 +13,7 @@ export class PlayerControls {
   public aiming = false;
   public isPointerLocked = false;
   public tabPressed = false;
+  public jumpPressed = false;
 
   private onKeyDown: (e: KeyboardEvent) => void;
   private onKeyUp: (e: KeyboardEvent) => void;
@@ -25,6 +26,7 @@ export class PlayerControls {
   constructor() {
     this.onKeyDown = (e: KeyboardEvent) => {
       this.keys[e.code] = true;
+      if (e.code === 'Space' && !e.repeat) this.jumpPressed = true;
       this.tabPressed = e.code === 'Tab' || e.key === 'Tab';
       if (['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowLeft', 'ArrowDown', 'ArrowRight', 'Space', 'Tab'].includes(e.code)) {
         e.preventDefault();
@@ -57,12 +59,14 @@ export class PlayerControls {
       if (!this.isPointerLocked) {
         this.shooting = false;
         this.aiming = false;
+        this.jumpPressed = false;
       }
     };
     this.onWindowBlur = () => {
       this.keys = {};
       this.shooting = false;
       this.aiming = false;
+      this.jumpPressed = false;
     };
 
     document.addEventListener('keydown', this.onKeyDown);
@@ -117,6 +121,8 @@ const PLAYER_HALF_W = 0.4;
 const PLAYER_HALF_D = 0.4;
 const PLAYER_HEIGHT = 1.8;
 const MAP_BOUNDARY = 30;
+const JUMP_SPEED = 8.5;
+const GRAVITY = 22;
 
 export class LocalPlayer {
   public position: THREE.Vector3;
@@ -124,6 +130,8 @@ export class LocalPlayer {
   public alive = true;
   public kills = 0;
   public deaths = 0;
+  private verticalVelocity = 0;
+  private isGrounded = true;
 
   constructor(spawnPosition: THREE.Vector3) {
     this.position = spawnPosition.clone();
@@ -134,10 +142,23 @@ export class LocalPlayer {
     right: THREE.Vector3,
     keys: Record<string, boolean>,
     dt: number,
-    colliders: MapCollider[]
+    colliders: MapCollider[],
+    jumpPressed = false
   ): void {
     if (!this.alive) return;
 
+    const previousY = this.position.y;
+    if (jumpPressed && this.isGrounded) {
+      this.verticalVelocity = JUMP_SPEED;
+      this.isGrounded = false;
+    }
+    this.verticalVelocity -= GRAVITY * dt;
+    this.position.y += this.verticalVelocity * dt;
+    if (this.position.y <= 0) {
+      this.position.y = 0;
+      this.verticalVelocity = 0;
+      this.isGrounded = true;
+    }
     const isSprinting = keys['ShiftLeft'] || keys['ShiftRight'] || keys['shift'];
     const speed = isSprinting ? PLAYER_SPRINT : PLAYER_SPEED;
 
@@ -153,12 +174,12 @@ export class LocalPlayer {
 
       // Separate X and Z collision for sliding movement
       const newPosX = this.position.clone().add(new THREE.Vector3(moveDir.x, 0, 0));
-      if (!this.collidesWithMap(newPosX, colliders)) {
+      if (this.verticalVelocity > 0 || !this.collidesWithMap(newPosX, colliders)) {
         this.position.x = newPosX.x;
       }
 
       const newPosZ = this.position.clone().add(new THREE.Vector3(0, 0, moveDir.z));
-      if (!this.collidesWithMap(newPosZ, colliders)) {
+      if (this.verticalVelocity > 0 || !this.collidesWithMap(newPosZ, colliders)) {
         this.position.z = newPosZ.z;
       }
     }
@@ -166,7 +187,20 @@ export class LocalPlayer {
     // Clamp to map boundaries
     this.position.x = Math.max(-MAP_BOUNDARY, Math.min(MAP_BOUNDARY, this.position.x));
     this.position.z = Math.max(-MAP_BOUNDARY, Math.min(MAP_BOUNDARY, this.position.z));
-    this.position.y = 0; // Stay on ground
+    if (this.verticalVelocity <= 0) {
+      for (const collider of colliders) {
+        const overlapsX = this.position.x + PLAYER_HALF_W > collider.min.x &&
+          this.position.x - PLAYER_HALF_W < collider.max.x;
+        const overlapsZ = this.position.z + PLAYER_HALF_D > collider.min.z &&
+          this.position.z - PLAYER_HALF_D < collider.max.z;
+        if (overlapsX && overlapsZ && previousY >= collider.max.y && this.position.y <= collider.max.y) {
+          this.position.y = collider.max.y;
+          this.verticalVelocity = 0;
+          this.isGrounded = true;
+          break;
+        }
+      }
+    }
   }
 
   private collidesWithMap(pos: THREE.Vector3, colliders: MapCollider[]): boolean {
@@ -182,6 +216,8 @@ export class LocalPlayer {
     );
 
     for (const col of colliders) {
+      // A player standing on a surface may move across that surface.
+      if (pos.y >= col.max.y - 0.08) continue;
       if (
         pMax.x > col.min.x && pMin.x < col.max.x &&
         pMax.y > col.min.y && pMin.y < col.max.y &&
@@ -195,6 +231,8 @@ export class LocalPlayer {
 
   respawn(position: THREE.Vector3): void {
     this.position.copy(position);
+    this.verticalVelocity = 0;
+    this.isGrounded = true;
     this.health = 100;
     this.alive = true;
   }

@@ -6,6 +6,7 @@ import {
   Vector3Data,
   RotationData,
 } from '../types/game';
+import { isPositionBlocked } from '../game/Collision';
 
 export class PlayerManager {
   private players: Map<string, PlayerState> = new Map();
@@ -39,6 +40,7 @@ export class PlayerManager {
   updatePosition(id: string, position: Vector3Data, rotation: RotationData): boolean {
     const player = this.players.get(id);
     if (!player || !player.alive) return false;
+    if (isPositionBlocked(position)) return false;
     player.position = position;
     player.rotation = rotation;
     return true;
