@@ -15,10 +15,10 @@ import type { PlayerState, RoomState } from './types/game';
 import { Socket } from 'socket.io-client';
 import type { WeaponType } from './weapons/Weapon';
 
-// ============================================================
+
 // App — top-level game state machine
 // MENU → LOBBY → COUNTDOWN → PLAYING → MATCH_OVER
-// ============================================================
+
 
 type AppState = 'MENU' | 'CONNECTING' | 'LOBBY' | 'COUNTDOWN' | 'PLAYING' | 'MATCH_OVER';
 
