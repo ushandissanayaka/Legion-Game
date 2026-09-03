@@ -6,7 +6,7 @@ import { Lighting } from './Lighting';
 import { GameMap, SPAWN_POSITIONS } from './Map';
 import { PlayerControls, LocalPlayer } from '../player/PlayerControls';
 import { RemotePlayer } from '../player/RemotePlayer';
-import { BotPlayer } from '../player/BotPlayer';
+import { BotPlayer, type BotTarget } from '../player/BotPlayer';
 import { Weapon, WEAPON_CONFIGS } from '../weapons/Weapon';
 import type { WeaponType } from '../weapons/Weapon';
 import { AudioManager } from '../audio/AudioManager';
@@ -50,6 +50,7 @@ export class Game {
   private localPlayerId: string;
   private spawnIndex: number;
   private isRunning = false;
+  private localRespawnTimer = 0;
 
   // Network throttle
   private networkTimer = 0;
@@ -229,6 +230,48 @@ export class Game {
     for (const bot of this.bots) {
       bot.update(dt);
     }
+
+    // Practice bots fire at the nearest living player or bot.
+    if (this.bots.length > 0) {
+      const localTarget: BotTarget = {
+        position: this.localPlayer.position,
+        alive: this.localPlayer.alive,
+        takeDamage: (damage: number) => this.localPlayer.takeDamage(damage),
+      };
+      for (const bot of this.bots) {
+        const targets: BotTarget[] = [localTarget, ...this.bots.filter(other => other !== bot)];
+        const target = bot.tryShoot(targets);
+        if (target) {
+          this.audio.playShoot();
+          const targetKilled = target.takeDamage(10);
+
+          if (target === localTarget) {
+            this.localPlayer.health = Math.max(0, this.localPlayer.health);
+            this.callbacks.onHealthChange(this.localPlayer.health);
+            (window as any).__hudShowDamage?.();
+          }
+
+          if (targetKilled && target === localTarget) {
+            this.localRespawnTimer = 3;
+            this.callbacks.onAliveChange(false);
+            this.callbacks.onKillsChange(this.localPlayer.kills, this.localPlayer.deaths);
+          }
+        }
+      }
+    }
+
+    if (!this.localPlayer.alive && this.localRespawnTimer > 0) {
+      this.localRespawnTimer -= dt;
+      if (this.localRespawnTimer <= 0) {
+        const spawnPos = SPAWN_POSITIONS[Math.floor(Math.random() * SPAWN_POSITIONS.length)];
+        this.localPlayer.respawn(spawnPos);
+        this.weapon.refillMagazine();
+        this.callbacks.onHealthChange(this.localPlayer.health);
+        this.callbacks.onAmmoChange(this.weapon.ammo, this.weapon.maxAmmo);
+        this.callbacks.onAliveChange(true);
+        this.audio.playRespawn();
+      }
+    }
   }
 
   private sendNetworkUpdate(): void {
@@ -337,7 +380,7 @@ export class Game {
     }) => {
       if (playerId === this.localPlayerId) {
         this.localPlayer.respawn(new THREE.Vector3(position.x, position.y, position.z));
-        this.weapon.reload();
+        this.weapon.refillMagazine();
         this.callbacks.onHealthChange(health);
         this.callbacks.onAmmoChange(this.weapon.ammo, this.weapon.maxAmmo);
         this.callbacks.onAliveChange(true);

@@ -23,6 +23,13 @@ const PATROL_POINTS: [number, number][] = [
   [0, 0], [8, -5], [-8, 5],
 ];
 
+export interface BotTarget {
+  position: THREE.Vector3;
+  mesh?: THREE.Object3D;
+  alive: boolean;
+  takeDamage: (damage: number) => boolean;
+}
+
 export class BotPlayer {
   public id: string;
   public name: string;
@@ -37,6 +44,12 @@ export class BotPlayer {
   private waypointTimer = 0;
   private yaw: number;
   private model: THREE.Group | null = null;
+  private weapon: THREE.Group;
+  private fireCooldown = 1.5;
+
+  get position(): THREE.Vector3 {
+    return this.pos;
+  }
 
   constructor(index: number, scene: THREE.Scene) {
     this.id = `bot_${index}`;
@@ -52,9 +65,39 @@ export class BotPlayer {
     );
     this.waypoint = this.pickWaypoint();
     this.mesh = new THREE.Group();
+    this.weapon = this.buildWeapon(BOT_COLORS[index % BOT_COLORS.length]);
+    this.mesh.add(this.weapon);
     this.buildMesh(index);
     this.mesh.position.copy(this.pos);
     scene.add(this.mesh);
+  }
+
+  private buildWeapon(color: number): THREE.Group {
+    const weapon = new THREE.Group();
+    const gunMaterial = new THREE.MeshLambertMaterial({ color: 0x202530 });
+    const handMaterial = new THREE.MeshLambertMaterial({ color: 0xc8956c });
+    const accentMaterial = new THREE.MeshLambertMaterial({ color, emissive: color, emissiveIntensity: 0.35 });
+
+    const gun = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.16, 0.75), gunMaterial);
+    gun.position.set(0.32, 1.25, 0.38);
+    weapon.add(gun);
+
+    const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.35, 8), gunMaterial);
+    barrel.rotation.x = Math.PI / 2;
+    barrel.position.set(0.32, 1.25, 0.9);
+    weapon.add(barrel);
+
+    const handFront = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 0.12), handMaterial);
+    handFront.position.set(0.32, 1.12, 0.52);
+    weapon.add(handFront);
+    const handRear = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 0.12), handMaterial);
+    handRear.position.set(0.32, 1.14, 0.18);
+    weapon.add(handRear);
+
+    const sight = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.04, 0.3), accentMaterial);
+    sight.position.set(0.32, 1.35, 0.38);
+    weapon.add(sight);
+    return weapon;
   }
 
   private pickWaypoint(): THREE.Vector3 {
@@ -147,6 +190,26 @@ export class BotPlayer {
     if (this.model) {
       this.model.position.y = Math.sin(Date.now() * 0.009) * 0.04;
     }
+
+    this.fireCooldown = Math.max(0, this.fireCooldown - dt);
+  }
+
+  tryShoot(targets: BotTarget[]): BotTarget | null {
+    if (!this.alive || this.fireCooldown > 0) return null;
+
+    const candidates = targets
+      .filter(target => target.alive)
+      .map(target => ({ target, distance: this.pos.distanceTo(target.position) }))
+      .filter(candidate => candidate.distance <= 28)
+      .sort((a, b) => a.distance - b.distance);
+    const candidate = candidates[0];
+    if (!candidate) return null;
+
+    const direction = candidate.target.position.clone().sub(this.pos).setY(0).normalize();
+    this.yaw = Math.atan2(direction.x, direction.z);
+
+    this.fireCooldown = 1.0 + Math.random() * 1.2;
+    return candidate.target;
   }
 
   /** Deal damage. Returns true if the bot was killed. */
