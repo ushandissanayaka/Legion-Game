@@ -10,6 +10,7 @@ export class PlayerControls {
   public mouseDeltaX = 0;
   public mouseDeltaY = 0;
   public shooting = false;
+  public shootPressed = false;
   public aiming = false;
   public isPointerLocked = false;
   public tabPressed = false;
@@ -45,6 +46,7 @@ export class PlayerControls {
     this.onMouseDown = (e: MouseEvent) => {
       if (e.button === 0 && this.isPointerLocked) {
         this.shooting = true;
+        this.shootPressed = true;
       }
       if (e.button === 2 && this.isPointerLocked) {
         this.aiming = true;
@@ -58,6 +60,7 @@ export class PlayerControls {
       this.isPointerLocked = document.pointerLockElement !== null;
       if (!this.isPointerLocked) {
         this.shooting = false;
+        this.shootPressed = false;
         this.aiming = false;
         this.jumpPressed = false;
       }
@@ -65,6 +68,7 @@ export class PlayerControls {
     this.onWindowBlur = () => {
       this.keys = {};
       this.shooting = false;
+      this.shootPressed = false;
       this.aiming = false;
       this.jumpPressed = false;
     };
