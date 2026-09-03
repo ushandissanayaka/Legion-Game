@@ -10,6 +10,7 @@ export class PlayerControls {
   public mouseDeltaX = 0;
   public mouseDeltaY = 0;
   public shooting = false;
+  public aiming = false;
   public isPointerLocked = false;
   public tabPressed = false;
 
@@ -19,17 +20,18 @@ export class PlayerControls {
   private onMouseDown: (e: MouseEvent) => void;
   private onMouseUp: (e: MouseEvent) => void;
   private onPointerLockChange: () => void;
+  private onWindowBlur: () => void;
 
   constructor() {
     this.onKeyDown = (e: KeyboardEvent) => {
       this.keys[e.code] = true;
-      this.keys[e.key.toLowerCase()] = true;
       this.tabPressed = e.code === 'Tab' || e.key === 'Tab';
-      if (e.code === 'Tab' || e.key === 'Tab') e.preventDefault();
+      if (['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowLeft', 'ArrowDown', 'ArrowRight', 'Space', 'Tab'].includes(e.code)) {
+        e.preventDefault();
+      }
     };
     this.onKeyUp = (e: KeyboardEvent) => {
       this.keys[e.code] = false;
-      this.keys[e.key.toLowerCase()] = false;
       if (e.code === 'Tab' || e.key === 'Tab') this.tabPressed = false;
     };
     this.onMouseMove = (e: MouseEvent) => {
@@ -42,12 +44,25 @@ export class PlayerControls {
       if (e.button === 0 && this.isPointerLocked) {
         this.shooting = true;
       }
+      if (e.button === 2 && this.isPointerLocked) {
+        this.aiming = true;
+      }
     };
     this.onMouseUp = (e: MouseEvent) => {
       if (e.button === 0) this.shooting = false;
+      if (e.button === 2) this.aiming = false;
     };
     this.onPointerLockChange = () => {
       this.isPointerLocked = document.pointerLockElement !== null;
+      if (!this.isPointerLocked) {
+        this.shooting = false;
+        this.aiming = false;
+      }
+    };
+    this.onWindowBlur = () => {
+      this.keys = {};
+      this.shooting = false;
+      this.aiming = false;
     };
 
     document.addEventListener('keydown', this.onKeyDown);
@@ -55,8 +70,14 @@ export class PlayerControls {
     document.addEventListener('mousemove', this.onMouseMove);
     document.addEventListener('mousedown', this.onMouseDown);
     document.addEventListener('mouseup', this.onMouseUp);
+    document.addEventListener('contextmenu', this.preventContextMenu);
     document.addEventListener('pointerlockchange', this.onPointerLockChange);
+    window.addEventListener('blur', this.onWindowBlur);
   }
+
+  private preventContextMenu = (e: MouseEvent) => {
+    if (this.isPointerLocked) e.preventDefault();
+  };
 
   requestPointerLock(element: HTMLElement): void {
     element.requestPointerLock();
@@ -80,7 +101,9 @@ export class PlayerControls {
     document.removeEventListener('mousemove', this.onMouseMove);
     document.removeEventListener('mousedown', this.onMouseDown);
     document.removeEventListener('mouseup', this.onMouseUp);
+    document.removeEventListener('contextmenu', this.preventContextMenu);
     document.removeEventListener('pointerlockchange', this.onPointerLockChange);
+    window.removeEventListener('blur', this.onWindowBlur);
   }
 }
 
