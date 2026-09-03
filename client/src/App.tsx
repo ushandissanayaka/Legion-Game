@@ -65,6 +65,7 @@ export default function App() {
   const socketRef = useRef<Socket | null>(null);
   const spawnIndexRef = useRef(0);
   const practiceAutoStartRef = useRef(false);
+  const matchStatsRef = useRef({ kills: 0, deaths: 0 });
 
   // ── Socket setup ──────────────────────────────────────────
   useEffect(() => {
@@ -139,8 +140,18 @@ export default function App() {
     });
 
     socket.on(SOCKET_EVENTS.MATCH_END, ({ room: r, winner: w }: { room: RoomState; winner: PlayerState | null }) => {
-      setRoom(r);
-      setWinner(w);
+      const finalStats = matchStatsRef.current;
+      setRoom(() => {
+        const finalRoom: RoomState = {
+          ...r,
+          players: r.players.map(player => player.id === socket.id
+            ? { ...player, kills: finalStats.kills, deaths: finalStats.deaths }
+            : player),
+        };
+        const finalLocal = finalRoom.players.find(player => player.id === socket.id);
+        setWinner(w?.id === socket.id ? finalLocal ?? w : w);
+        return finalRoom;
+      });
       setAppState('MATCH_OVER');
       gameRef.current?.destroy();
       gameRef.current = null;
@@ -200,6 +211,7 @@ export default function App() {
     setMaxAmmo(30);
     setKills(0);
     setDeaths(0);
+    matchStatsRef.current = { kills: 0, deaths: 0 };
     setKillFeed([]);
     setIsAlive(true);
     setIsPointerLocked(false);
@@ -223,7 +235,18 @@ export default function App() {
       {
         onHealthChange: setHealth,
         onAmmoChange: (a, m) => { setAmmo(a); setMaxAmmo(m); },
-        onKillsChange: (k, d) => { setKills(k); setDeaths(d); },
+        onKillsChange: (k, d) => {
+          matchStatsRef.current = { kills: k, deaths: d };
+          setKills(k);
+          setDeaths(d);
+          setLocalPlayer(prev => prev ? { ...prev, kills: k, deaths: d } : prev);
+          setRoom(prev => prev ? {
+            ...prev,
+            players: prev.players.map(player =>
+              player.id === localPlayer.id ? { ...player, kills: k, deaths: d } : player
+            ),
+          } : prev);
+        },
         onPointerLockChange: setIsPointerLocked,
         onAliveChange: setIsAlive,
         onWeaponChange: setCurrentWeapon,
