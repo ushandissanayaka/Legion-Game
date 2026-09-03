@@ -10,6 +10,8 @@ interface EnemyProps {
   onDamagePlayer?: (damage: number) => void;
 }
 
+
+
 export function Enemy({ position, onDie, onDamagePlayer }: EnemyProps) {
   const group = useRef<THREE.Group>(null);
   const { camera } = useThree();
