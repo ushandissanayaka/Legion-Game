@@ -8,12 +8,10 @@ import { loadPlayerModel } from './ModelLoader';
 
 // Player slot colors — bold bright for daytime visibility
 const PLAYER_COLORS   = [0xff2d55, 0x00e5ff, 0xffbe00, 0x39ff6e];
-const PLAYER_EMISSIVE = [0x880015, 0x003344, 0x554400, 0x003311];
 
 export class RemotePlayer {
   public id: string;
   public mesh: THREE.Group;
-  private model: THREE.Group | null = null;
   private namePlate: THREE.Sprite | null = null;
 
   // Interpolation
@@ -25,20 +23,14 @@ export class RemotePlayer {
   private interpDuration = 0.05; // seconds
 
   public alive = true;
-  private colorIndex: number;
-
   constructor(state: PlayerState, scene: THREE.Scene, colorIndex: number) {
     this.id = state.id;
-    this.colorIndex = colorIndex;
     this.mesh = new THREE.Group();
 
     const color = PLAYER_COLORS[colorIndex % PLAYER_COLORS.length];
-    const emissive = PLAYER_EMISSIVE[colorIndex % PLAYER_EMISSIVE.length];
 
     // Load 3D model
     loadPlayerModel((model) => {
-      this.model = model;
-      
       // Tint the model's materials to match player color
       model.traverse((child) => {
         if ((child as THREE.Mesh).isMesh) {

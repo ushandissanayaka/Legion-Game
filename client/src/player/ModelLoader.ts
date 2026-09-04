@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
 let cachedPlayerModel: THREE.Group | null = null;
 let cachedEnemyModel: THREE.Group | null = null;
@@ -13,7 +14,7 @@ export function loadPlayerModel(callback: (model: THREE.Group) => void) {
     return;
   }
   
-  loader.load('/models/player.glb', (gltf) => {
+  loader.load('/models/player.glb', (gltf: GLTF) => {
     const model = gltf.scene;
     // Scale and position adjustment for RobotExpressive model
     model.scale.set(0.4, 0.4, 0.4);
@@ -30,7 +31,7 @@ export function loadPlayerModel(callback: (model: THREE.Group) => void) {
 
     cachedPlayerModel = model;
     callback(model.clone(true));
-  }, undefined, (err) => {
+  }, undefined, (err: unknown) => {
     console.error('Failed to load player.glb. Make sure the file exists at public/models/player.glb', err);
   });
 }
@@ -41,7 +42,7 @@ export function loadEnemyModel(callback: (model: THREE.Group) => void) {
     return;
   }
 
-  loader.load(ENEMY_MODEL_URL, (gltf) => {
+  loader.load(ENEMY_MODEL_URL, (gltf: GLTF) => {
     const model = gltf.scene;
     const bounds = new THREE.Box3().setFromObject(model);
     const height = bounds.max.y - bounds.min.y;
@@ -60,7 +61,7 @@ export function loadEnemyModel(callback: (model: THREE.Group) => void) {
 
     cachedEnemyModel = model;
     callback(model.clone(true));
-  }, undefined, (err) => {
+  }, undefined, (err: unknown) => {
     console.error(`Failed to load enemy model at ${ENEMY_MODEL_URL}`, err);
   });
 }

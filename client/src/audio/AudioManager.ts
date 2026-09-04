@@ -115,6 +115,11 @@ export class AudioManager {
     this.noise(0.04, 800, 'square', 0.2, 0.04);
   }
 
+  playReload(): void {
+    if (!this.enabled) return;
+    this.noise(0.12, 260, 'triangle', 0.25, 0.12);
+  }
+
   playCountdown(): void {
     if (!this.enabled) return;
     this.noise(0.2, 440, 'sine', 0.35, 0.2);

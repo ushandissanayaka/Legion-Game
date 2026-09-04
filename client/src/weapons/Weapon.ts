@@ -243,7 +243,7 @@ export class Weapon {
     this.scene.add(this.weaponGroup);
   }
 
-  update(dt: number, playerPos: THREE.Vector3): void {
+  update(dt: number, _playerPos: THREE.Vector3): void {
     if (this.fireCooldown > 0) this.fireCooldown -= dt;
 
     // Reload countdown

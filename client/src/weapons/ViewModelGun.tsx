@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState, forwardRef, useImperativeHandle } from 'react';
+import { useRef, useState, forwardRef, useImperativeHandle } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 
@@ -176,7 +176,6 @@ export const ViewModelGun = forwardRef<ViewModelGunHandle, ViewModelGunProps>(
     const ammoRef = useRef(MAX_AMMO);
     const lastFireTime = useRef(0);
     const [flash, setFlash] = useState(false);
-    const [recoilY, setRecoilY] = useState(0);
     const recoilRef = useRef(0);
 
     // Expose API to parent
@@ -233,7 +232,7 @@ export const ViewModelGun = forwardRef<ViewModelGunHandle, ViewModelGunProps>(
     }));
 
     // Attach group to camera every frame
-    useFrame((state, delta) => {
+    useFrame((_, delta) => {
       if (!groupRef.current) return;
 
       // Decay recoil

@@ -7,7 +7,7 @@ import { GameMap, SPAWN_POSITIONS } from './Map';
 import { PlayerControls, LocalPlayer } from '../player/PlayerControls';
 import { RemotePlayer } from '../player/RemotePlayer';
 import { BotPlayer, type BotTarget } from '../player/BotPlayer';
-import { Weapon, WEAPON_CONFIGS } from '../weapons/Weapon';
+import { Weapon } from '../weapons/Weapon';
 import type { WeaponType } from '../weapons/Weapon';
 import { AudioManager } from '../audio/AudioManager';
 import { Socket } from 'socket.io-client';
@@ -48,13 +48,8 @@ export class Game {
   private container: HTMLElement;
   private roomId: string;
   private localPlayerId: string;
-  private spawnIndex: number;
   private isRunning = false;
   private localRespawnTimer = 0;
-
-  // Network throttle
-  private networkTimer = 0;
-  private readonly NETWORK_HZ = 25; // send position 25 times/sec
 
   constructor(
     container: HTMLElement,
@@ -73,7 +68,6 @@ export class Game {
     this.audio = audio;
     this.localPlayerId = localPlayerId;
     this.roomId = roomId;
-    this.spawnIndex = spawnIndex;
     this.callbacks = callbacks;
 
     // Init systems
@@ -292,27 +286,36 @@ export class Game {
 
   private registerSocketEvents(): void {
     // New player joined while in game
-    this.socket.on(SOCKET_EVENTS.PLAYER_JOINED, ({ player, room }: { player: PlayerState; room: RoomState }) => {
+    this.socket.on(SOCKET_EVENTS.PLAYER_JOINED, this.handlePlayerJoined);
+    this.socket.on(SOCKET_EVENTS.PLAYER_LEFT, this.handlePlayerLeft);
+    this.socket.on(SOCKET_EVENTS.PLAYER_POSITION, this.handlePlayerPosition);
+    this.socket.on(SOCKET_EVENTS.PLAYER_HIT, this.handlePlayerHit);
+    this.socket.on(SOCKET_EVENTS.PLAYER_DEATH, this.handlePlayerDeath);
+    this.socket.on(SOCKET_EVENTS.PLAYER_RESPAWN, this.handlePlayerRespawn);
+    this.socket.on(SOCKET_EVENTS.GAME_STATE_UPDATE, this.handleGameStateUpdate);
+  }
+
+  private handlePlayerJoined = ({ player, room }: { player: PlayerState; room: RoomState }) => {
       if (player.id !== this.localPlayerId && !this.remotePlayers.has(player.id)) {
         const colorIdx = this.remotePlayers.size % 4;
         const rp = new RemotePlayer(player, this.scene.scene, colorIdx);
         this.remotePlayers.set(player.id, rp);
       }
       this.callbacks.onRoomUpdate(room);
-    });
+  };
 
     // Player left
-    this.socket.on(SOCKET_EVENTS.PLAYER_LEFT, ({ playerId, room }: { playerId: string; room: RoomState }) => {
+  private handlePlayerLeft = ({ playerId, room }: { playerId: string; room: RoomState }) => {
       const rp = this.remotePlayers.get(playerId);
       if (rp) {
         rp.dispose(this.scene.scene);
         this.remotePlayers.delete(playerId);
       }
       this.callbacks.onRoomUpdate(room);
-    });
+  };
 
     // Position update from other player
-    this.socket.on(SOCKET_EVENTS.PLAYER_POSITION, ({
+  private handlePlayerPosition = ({
       playerId, position, rotation
     }: {
       playerId: string;
@@ -321,10 +324,10 @@ export class Game {
     }) => {
       const rp = this.remotePlayers.get(playerId);
       if (rp) rp.setTargetState(position, rotation);
-    });
+  };
 
     // Hit confirmation from server
-    this.socket.on(SOCKET_EVENTS.PLAYER_HIT, ({
+  private handlePlayerHit = ({
       targetId, newHealth, shooterId
     }: {
       targetId: string;
@@ -341,10 +344,10 @@ export class Game {
         (window as any).__hudShowHit?.();
         this.audio.playHit();
       }
-    });
+  };
 
     // Death event
-    this.socket.on(SOCKET_EVENTS.PLAYER_DEATH, ({
+  private handlePlayerDeath = ({
       victimId, killerId, killerName, victimName
     }: {
       victimId: string;
@@ -369,10 +372,10 @@ export class Game {
           this.callbacks.onKillsChange(this.localPlayer.kills, this.localPlayer.deaths);
         }
       }
-    });
+  };
 
     // Respawn event
-    this.socket.on(SOCKET_EVENTS.PLAYER_RESPAWN, ({
+  private handlePlayerRespawn = ({
       playerId, position, health
     }: {
       playerId: string;
@@ -390,26 +393,25 @@ export class Game {
         const rp = this.remotePlayers.get(playerId);
         if (rp) rp.setAlive(true, position);
       }
-    });
+  };
 
     // Room state updates (score changes etc.)
-    this.socket.on(SOCKET_EVENTS.GAME_STATE_UPDATE, ({ room }: { room: RoomState }) => {
-      this.callbacks.onRoomUpdate(room);
-    });
-  }
+  private handleGameStateUpdate = ({ room }: { room: RoomState }) => {
+    this.callbacks.onRoomUpdate(room);
+  };
 
   destroy(): void {
     this.isRunning = false;
     this.gameLoop.stop();
 
     // Cleanup socket listeners
-    this.socket.off(SOCKET_EVENTS.PLAYER_JOINED);
-    this.socket.off(SOCKET_EVENTS.PLAYER_LEFT);
-    this.socket.off(SOCKET_EVENTS.PLAYER_POSITION);
-    this.socket.off(SOCKET_EVENTS.PLAYER_HIT);
-    this.socket.off(SOCKET_EVENTS.PLAYER_DEATH);
-    this.socket.off(SOCKET_EVENTS.PLAYER_RESPAWN);
-    this.socket.off(SOCKET_EVENTS.GAME_STATE_UPDATE);
+    this.socket.off(SOCKET_EVENTS.PLAYER_JOINED, this.handlePlayerJoined);
+    this.socket.off(SOCKET_EVENTS.PLAYER_LEFT, this.handlePlayerLeft);
+    this.socket.off(SOCKET_EVENTS.PLAYER_POSITION, this.handlePlayerPosition);
+    this.socket.off(SOCKET_EVENTS.PLAYER_HIT, this.handlePlayerHit);
+    this.socket.off(SOCKET_EVENTS.PLAYER_DEATH, this.handlePlayerDeath);
+    this.socket.off(SOCKET_EVENTS.PLAYER_RESPAWN, this.handlePlayerRespawn);
+    this.socket.off(SOCKET_EVENTS.GAME_STATE_UPDATE, this.handleGameStateUpdate);
 
     this.container.removeEventListener('click', this.handleContainerClick);
     document.removeEventListener('pointerlockchange', this.onPointerLockChange);

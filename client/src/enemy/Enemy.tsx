@@ -2,7 +2,6 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useGLTF, useAnimations } from '@react-three/drei';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
-import { AssaultRifleEnemy } from '../weapons/EnemyGun';
 
 interface EnemyProps {
   position: [number, number, number];
@@ -22,7 +21,6 @@ export function Enemy({ position, onDie, onDamagePlayer }: EnemyProps) {
   const hpRef = useRef(100);
   const [dead, setDead] = useState(false);
   const lastShootTime = useRef(0);
-  const flashTimer = useRef(0);
   const [muzzleFlash, setMuzzleFlash] = useState(false);
 
   // Clone scene so each enemy is independent
