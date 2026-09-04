@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { PlayerState } from '../types/game';
-import { loadPlayerModel } from './ModelLoader';
+import { loadEnemyModel } from './ModelLoader';
 
 // ============================================================
 // Remote Player — GLTF mesh with interpolation
@@ -30,7 +30,7 @@ export class RemotePlayer {
     const color = PLAYER_COLORS[colorIndex % PLAYER_COLORS.length];
 
     // Load 3D model
-    loadPlayerModel((model) => {
+    loadEnemyModel((model) => {
       // Tint the model's materials to match player color
       model.traverse((child) => {
         if ((child as THREE.Mesh).isMesh) {
