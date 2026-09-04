@@ -140,11 +140,14 @@ export function registerSocketHandlers(
   }) => {
     const { roomId, position, rotation } = payload;
     const room = gameManager.getRoom(roomId);
-    if (!room) return;
+    const player = playerManager.getPlayer(socket.id);
+    if (!room || !player || player.roomId !== roomId || !room.players.has(socket.id)) return;
+
+    if (!position || !rotation || !Number.isFinite(position.x) || !Number.isFinite(position.y) || !Number.isFinite(position.z)
+      || !Number.isFinite(rotation.yaw) || !Number.isFinite(rotation.pitch)) return;
 
     const accepted = playerManager.updatePosition(socket.id, position, rotation);
-    const player = playerManager.getPlayer(socket.id);
-    if (!accepted || !player) return;
+    if (!accepted) return;
 
     // Broadcast to others in room (not sender)
     socket.to(roomId).emit(SOCKET_EVENTS.PLAYER_POSITION, {
@@ -182,11 +185,11 @@ export function registerSocketHandlers(
       if (!room || room.gameState !== GameStateEnum.PLAYING) return;
 
       const shooter = playerManager.getPlayer(socket.id);
-      if (!shooter || !shooter.alive) return;
+      if (!shooter || shooter.roomId !== roomId || !room.players.has(socket.id) || !shooter.alive) return;
 
       // Validate timestamp (reject shots too old)
       const now = Date.now();
-      if (now - timestamp > NETWORK_LAG_TOLERANCE_MS) return;
+      if (!Number.isFinite(timestamp) || timestamp > now + 1000 || now - timestamp > NETWORK_LAG_TOLERANCE_MS) return;
 
       // If no target claimed, nothing to process (visual only)
       if (!targetId) return;

@@ -1,6 +1,5 @@
 import { io, Socket } from 'socket.io-client';
 import { SOCKET_EVENTS } from '../types/game';
-import type { PlayerState, RoomState } from '../types/game';
 
 // ============================================================
 // Socket.IO client singleton

@@ -19,10 +19,11 @@ export default defineConfig({
     sourcemap: false,
     rollupOptions: {
       output: {
-        manualChunks: {
-          three: ['three'],
-          react: ['react', 'react-dom'],
-          socket: ['socket.io-client'],
+        manualChunks: (id) => {
+          if (id.includes('node_modules/three')) return 'three';
+          if (id.includes('node_modules/react')) return 'react';
+          if (id.includes('node_modules/socket.io-client')) return 'socket';
+          return undefined;
         },
       },
     },

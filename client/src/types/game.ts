@@ -3,13 +3,15 @@
 // Shared between client and server (duplicated, not symlinked)
 // ============================================================
 
-export enum GameStateEnum {
-  MENU = 'MENU',
-  LOBBY = 'LOBBY',
-  COUNTDOWN = 'COUNTDOWN',
-  PLAYING = 'PLAYING',
-  MATCH_OVER = 'MATCH_OVER',
-}
+export const GameStateEnum = {
+  MENU: 'MENU',
+  LOBBY: 'LOBBY',
+  COUNTDOWN: 'COUNTDOWN',
+  PLAYING: 'PLAYING',
+  MATCH_OVER: 'MATCH_OVER',
+} as const;
+
+export type GameStateEnum = typeof GameStateEnum[keyof typeof GameStateEnum];
 
 export interface Vector3Data {
   x: number;

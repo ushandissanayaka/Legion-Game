@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import type { MapCollider } from './Map';
 
 // ============================================================
 // First-Person Camera with pointer lock and vertical clamp

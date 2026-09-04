@@ -1,5 +1,5 @@
 import React from 'react';
-import type { RoomState, PlayerState } from '../types/game';
+import type { RoomState } from '../types/game';
 
 interface ScoreboardProps {
   room: RoomState;

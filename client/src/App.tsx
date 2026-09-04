@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { MainMenu } from './components/MainMenu';
 import { Lobby } from './components/Lobby';
 import { HUD } from './components/HUD';
@@ -8,7 +8,6 @@ import { Game } from './game/Game';
 import { AudioManager } from './audio/AudioManager';
 import { connectSocket, disconnectSocket } from './multiplayer/SocketClient';
 import {
-  GameStateEnum,
   SOCKET_EVENTS,
 } from './types/game';
 import type { PlayerState, RoomState } from './types/game';

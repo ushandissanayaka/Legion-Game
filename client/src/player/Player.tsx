@@ -1,17 +1,21 @@
-import React, { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import type { Dispatch, SetStateAction } from 'react';
 import { useGLTF, useAnimations } from '@react-three/drei';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
-import { ViewModelGun, ViewModelGunHandle, GunType } from '../weapons/ViewModelGun';
+import { ViewModelGun } from '../weapons/ViewModelGun';
+import type { ViewModelGunHandle, GunType } from '../weapons/ViewModelGun';
 
 interface PlayerProps {
   gunType?: GunType;
-  onHealthChange?: React.Dispatch<React.SetStateAction<number>>;
+  onHealthChange?: Dispatch<SetStateAction<number>>;
   onAmmoChange?: (current: number, max: number) => void;
   onGameOver?: () => void;
 }
 
 export function Player({ gunType = 'assault', onHealthChange, onAmmoChange, onGameOver }: PlayerProps) {
+  void onHealthChange;
+  void onGameOver;
   const group = useRef<THREE.Group>(null);
   const { camera, scene } = useThree();
   const gunRef = useRef<ViewModelGunHandle>(null);
