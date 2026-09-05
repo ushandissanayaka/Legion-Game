@@ -64,6 +64,8 @@ export class Game {
     initialWeapon: WeaponType = 'assault'
   ) {
     this.container = container;
+    this.container.tabIndex = -1;
+    this.container.focus({ preventScroll: true });
     this.socket = socket;
     this.audio = audio;
     this.localPlayerId = localPlayerId;
@@ -100,6 +102,7 @@ export class Game {
     }
 
     // Set initial camera position
+    this.camera.yaw = Math.atan2(spawnPos.x, spawnPos.z);
     this.camera.updateFromPosition(this.localPlayer.position);
 
     // Pointer lock setup

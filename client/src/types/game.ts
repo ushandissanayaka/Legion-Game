@@ -197,6 +197,7 @@ export const SOCKET_EVENTS = {
   // Client → Server
   CREATE_ROOM: 'createRoom',
   JOIN_ROOM: 'joinRoom',
+  AUTO_JOIN_ROOM: 'autoJoinRoom',
   LEAVE_ROOM: 'leaveRoom',
   PLAYER_MOVE: 'playerMove',
   PLAYER_SHOOT: 'playerShoot',
