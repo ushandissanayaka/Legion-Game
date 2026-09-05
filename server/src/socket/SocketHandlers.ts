@@ -112,6 +112,61 @@ export function registerSocketHandlers(
   });
 
   // ──────────────────────────────────────────────────────────
+  // AUTO JOIN ROOM
+  // ──────────────────────────────────────────────────────────
+  socket.on(SOCKET_EVENTS.AUTO_JOIN_ROOM, (payload: { playerName: string; matchDuration?: number }) => {
+    try {
+      const { playerName, matchDuration } = payload;
+      if (!playerName?.trim()) {
+        socket.emit(SOCKET_EVENTS.ERROR, { message: 'Player name required', code: 'INVALID_NAME' });
+        return;
+      }
+
+      const rooms = gameManager.getAllRooms();
+      let joinedRoom = null;
+
+      // Find an available room
+      for (const room of rooms) {
+        if (room.playerCount < 10 && room.gameState === GameStateEnum.LOBBY) { // assuming max 10
+          joinedRoom = room;
+          break;
+        }
+      }
+
+      if (joinedRoom) {
+        // Join existing room
+        const spawnIndex = joinedRoom.playerCount;
+        const player = playerManager.createPlayer(socket.id, playerName, joinedRoom.id, spawnIndex, false);
+        joinedRoom.addPlayer(player);
+        socket.join(joinedRoom.id);
+
+        socket.emit(SOCKET_EVENTS.ROOM_JOINED, { player, room: joinedRoom.getRoomState() });
+        socket.to(joinedRoom.id).emit(SOCKET_EVENTS.PLAYER_JOINED, {
+          player,
+          room: joinedRoom.getRoomState(),
+        });
+        console.log(`[Room] ${playerName} auto-joined room ${joinedRoom.id} (${joinedRoom.playerCount} players)`);
+      } else {
+        // Create new room
+        const newRoom = gameManager.createRoom(socket.id, matchDuration);
+        const player = playerManager.createPlayer(socket.id, playerName, newRoom.id, 0, true);
+        newRoom.addPlayer(player);
+        socket.join(newRoom.id);
+
+        socket.emit(SOCKET_EVENTS.ROOM_CREATED, {
+          roomId: newRoom.id,
+          player,
+          room: newRoom.getRoomState(),
+        });
+        console.log(`[Room] ${playerName} auto-created room ${newRoom.id}`);
+      }
+    } catch (err) {
+      console.error('autoJoinRoom error:', err);
+      socket.emit(SOCKET_EVENTS.ERROR, { message: 'Failed to auto-join room', code: 'SERVER_ERROR' });
+    }
+  });
+
+  // ──────────────────────────────────────────────────────────
   // LEAVE ROOM
   // ──────────────────────────────────────────────────────────
   socket.on(SOCKET_EVENTS.LEAVE_ROOM, (payload: { roomId: string }) => {
