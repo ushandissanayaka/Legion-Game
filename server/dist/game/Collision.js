@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.isPositionBlocked = isPositionBlocked;
+exports.isShotBlocked = isShotBlocked;
 const PLAYER_RADIUS = 0.4;
 const ARENA_LIMIT = 30;
 function box(width, depth, x, z) {
@@ -54,5 +55,34 @@ function isPositionBlocked(position) {
         position.x - PLAYER_RADIUS < collider.maxX &&
         position.z + PLAYER_RADIUS > collider.minZ &&
         position.z - PLAYER_RADIUS < collider.maxZ);
+}
+function isShotBlocked(origin, direction, maxDistance) {
+    for (const collider of MAP_COLLIDERS) {
+        let tMin = 0;
+        let tMax = maxDistance;
+        for (const [start, dir, min, max] of [
+            [origin.x, direction.x, collider.minX, collider.maxX],
+            [origin.z, direction.z, collider.minZ, collider.maxZ],
+        ]) {
+            if (Math.abs(dir) < 0.000001) {
+                if (start < min || start > max) {
+                    tMin = 1;
+                    tMax = 0;
+                    break;
+                }
+                continue;
+            }
+            const t1 = (min - start) / dir;
+            const t2 = (max - start) / dir;
+            tMin = Math.max(tMin, Math.min(t1, t2));
+            tMax = Math.min(tMax, Math.max(t1, t2));
+            if (tMin > tMax)
+                break;
+        }
+        if (tMin <= tMax && tMax >= 0 && tMin <= maxDistance && origin.y >= 0 && origin.y <= 10) {
+            return true;
+        }
+    }
+    return false;
 }
 //# sourceMappingURL=Collision.js.map

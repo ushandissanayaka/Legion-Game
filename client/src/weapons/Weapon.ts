@@ -4,6 +4,7 @@ import { RemotePlayer } from '../player/RemotePlayer';
 import type { BotPlayer } from '../player/BotPlayer';
 import { Lighting } from '../game/Lighting';
 import { AudioManager } from '../audio/AudioManager';
+import type { MapCollider } from '../game/Map';
 
 // ============================================================
 // Weapon System — 3 weapon types with distinct geometry,
@@ -136,7 +137,12 @@ function buildSniperRifle(): THREE.Group {
   const dark   = new THREE.MeshLambertMaterial({ color: 0x1c1c1c });
   const metal  = new THREE.MeshLambertMaterial({ color: 0x3d3d3d });
   const scope  = new THREE.MeshLambertMaterial({ color: 0x111111 });
-  const lens   = new THREE.MeshLambertMaterial({ color: 0x003366, transparent: true, opacity: 0.8 });
+  const lens   = new THREE.MeshLambertMaterial({
+    color: 0x1f6f9d,
+    transparent: true,
+    opacity: 0.28,
+    depthWrite: false,
+  });
   const skin   = new THREE.MeshLambertMaterial({ color: 0xc8956c });
   const tan    = new THREE.MeshLambertMaterial({ color: 0x8b6914 });
 
@@ -177,10 +183,12 @@ export class Weapon {
   private camera: Camera;
   private lighting: Lighting;
   private audio: AudioManager;
+  private colliders: MapCollider[];
 
   private fireCooldown = 0;
   private isReloading = false;
   private reloadTimer = 0;
+  private aimBlend = 0;
 
   public currentType: WeaponType;
   public ammo: number;
@@ -196,12 +204,14 @@ export class Weapon {
     camera: Camera,
     lighting: Lighting,
     audio: AudioManager,
+    colliders: MapCollider[] = [],
     initialWeapon: WeaponType = 'assault'
   ) {
     this.scene = scene;
     this.camera = camera;
     this.lighting = lighting;
     this.audio = audio;
+    this.colliders = colliders;
     this.currentType = initialWeapon;
     this.config = WEAPON_CONFIGS[initialWeapon];
     this.ammo = this.config.magazineSize;
@@ -243,7 +253,7 @@ export class Weapon {
     this.scene.add(this.weaponGroup);
   }
 
-  update(dt: number, _playerPos: THREE.Vector3): void {
+  update(dt: number, _playerPos: THREE.Vector3, aiming = false): void {
     if (this.fireCooldown > 0) this.fireCooldown -= dt;
 
     // Reload countdown
@@ -252,6 +262,7 @@ export class Weapon {
       if (this.reloadTimer <= 0) {
         this.isReloading = false;
         this.ammo = this.config.magazineSize;
+        this.audio.playReloadComplete();
       }
     }
 
@@ -268,14 +279,23 @@ export class Weapon {
     const right = new THREE.Vector3();
     right.crossVectors(forward, cam.up).normalize();
     const up = cam.up.clone().normalize();
+    this.aimBlend += ((aiming ? 1 : 0) - this.aimBlend) * Math.min(1, dt * 14);
+    const reloadProgress = this.isReloading
+      ? 1 - Math.max(0, this.reloadTimer) / this.config.reloadTime
+      : 0;
+    const reloadMotion = Math.sin(Math.min(1, reloadProgress) * Math.PI);
 
     this.weaponGroup.position
       .copy(camPos)
-      .addScaledVector(forward, 0.42 - this.recoilOffset * 0.04)
-      .addScaledVector(right,   0.20)
-      .addScaledVector(up,     -0.18 - this.recoilOffset * 0.02);
+      .addScaledVector(forward, 0.42 + this.aimBlend * 0.13 - this.recoilOffset * 0.04)
+      .addScaledVector(right,   0.20 - this.aimBlend * 0.17)
+      .addScaledVector(up,     -0.18 + this.aimBlend * 0.14 - this.recoilOffset * 0.02 - reloadMotion * 0.32);
 
     this.weaponGroup.quaternion.copy(cam.quaternion);
+    if (this.isReloading) {
+      this.weaponGroup.rotateZ(-reloadMotion * 0.35);
+      this.weaponGroup.rotateX(reloadMotion * 0.18);
+    }
   }
 
   tryFire(remotePlayers: Map<string, RemotePlayer>, bots: BotPlayer[] = []): ShotResult | null {
@@ -307,6 +327,7 @@ export class Weapon {
       ).normalize();
 
       const raycaster = new THREE.Raycaster(origin, dir, 0.1, this.config.range);
+      const coverDistance = this.getCoverDistance(origin, dir);
 
       // Check remote players
       for (const [id, rp] of remotePlayers) {
@@ -314,7 +335,7 @@ export class Weapon {
         const meshes: THREE.Object3D[] = [];
         rp.mesh.traverse(obj => { if (obj instanceof THREE.Mesh) meshes.push(obj); });
         const hits = raycaster.intersectObjects(meshes, false);
-        if (hits.length > 0 && hits[0].distance < closestDist) {
+        if (hits.length > 0 && hits[0].distance < closestDist && hits[0].distance < coverDistance) {
           closestDist = hits[0].distance;
           hitPlayerId = id;
           hitBotIndex = -1;
@@ -327,7 +348,7 @@ export class Weapon {
         const meshes: THREE.Object3D[] = [];
         bots[i].mesh.traverse(obj => { if (obj instanceof THREE.Mesh) meshes.push(obj); });
         const hits = raycaster.intersectObjects(meshes, false);
-        if (hits.length > 0 && hits[0].distance < closestDist) {
+        if (hits.length > 0 && hits[0].distance < closestDist && hits[0].distance < coverDistance) {
           closestDist = hits[0].distance;
           hitBotIndex = i;
           hitPlayerId = null;
@@ -354,6 +375,15 @@ export class Weapon {
     this.audio.playReload();
   }
 
+  private getCoverDistance(origin: THREE.Vector3, direction: THREE.Vector3): number {
+    let closest = this.config.range;
+    for (const collider of this.colliders) {
+      const distance = rayIntersectsBox(origin, direction, collider);
+      if (distance !== null && distance < closest) closest = distance;
+    }
+    return closest;
+  }
+
   refillMagazine(): void {
     this.isReloading = false;
     this.reloadTimer = 0;
@@ -378,4 +408,29 @@ export class Weapon {
       }
     });
   }
+}
+
+function rayIntersectsBox(
+  origin: THREE.Vector3,
+  direction: THREE.Vector3,
+  collider: MapCollider
+): number | null {
+  let near = 0;
+  let far = Infinity;
+  for (const axis of ['x', 'y', 'z'] as const) {
+    const start = origin[axis];
+    const delta = direction[axis];
+    const min = collider.min[axis];
+    const max = collider.max[axis];
+    if (Math.abs(delta) < 0.000001) {
+      if (start < min || start > max) return null;
+      continue;
+    }
+    const t1 = (min - start) / delta;
+    const t2 = (max - start) / delta;
+    near = Math.max(near, Math.min(t1, t2));
+    far = Math.min(far, Math.max(t1, t2));
+    if (near > far) return null;
+  }
+  return near >= 0 && near <= far ? near : null;
 }

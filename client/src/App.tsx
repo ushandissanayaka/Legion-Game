@@ -411,6 +411,8 @@ export default function App() {
             onJoinRoom={handleJoinRoom}
             onAutoJoinRoom={handleAutoJoinRoom}
             onStartPractice={handleStartPractice}
+            selectedWeapon={weaponType}
+            onWeaponChange={setWeaponType}
             isConnecting={isConnecting}
             error={error}
           />

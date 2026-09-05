@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.registerSocketHandlers = registerSocketHandlers;
+const Collision_1 = require("../game/Collision");
 const game_1 = require("../types/game");
 const AUTO_MATCHMAKING_WINDOW_MS = 5000;
 // Simple 3D vector helper
@@ -225,6 +226,8 @@ function registerSocketHandlers(io, socket, gameManager, playerManager) {
                     return direction;
                 return { x: direction.x / len, y: direction.y / len, z: direction.z / len };
             })();
+            if ((0, Collision_1.isShotBlocked)(origin, normalizedDir, 150))
+                return;
             const isHit = rayIntersectsSphere(origin, normalizedDir, target.position, game_1.PLAYER_HITBOX_RADIUS * 2.5);
             if (!isHit) {
                 // Shot didn't actually hit on server — could be lag, so we trust with leniency

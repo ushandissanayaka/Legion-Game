@@ -80,7 +80,7 @@ export class RemotePlayer {
     ctx.fillText(name.substring(0, 16), 128, 32);
 
     const texture = new THREE.CanvasTexture(canvas);
-    const spriteMat = new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: false });
+    const spriteMat = new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: true, depthWrite: false });
     this.namePlate = new THREE.Sprite(spriteMat);
     this.namePlate.scale.set(2.8, 0.7, 1);
     this.namePlate.position.y = 2.6;
