@@ -7,7 +7,7 @@ import * as THREE from 'three';
 const EYE_HEIGHT = 1.7;
 const VERTICAL_LIMIT = Math.PI / 2 - 0.05; // ~85°
 const DEFAULT_FOV = 75;
-const AIM_FOV = 45;
+const AIM_FOV = 38;
 
 export class Camera {
   public camera: THREE.PerspectiveCamera;

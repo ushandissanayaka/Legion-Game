@@ -48,6 +48,8 @@ interface MainMenuProps {
   onJoinRoom: (name: string, roomId: string) => void;
   onAutoJoinRoom?: (name: string, duration: number) => void;
   onStartPractice: (name: string, botCount: number, duration: number, gun: WeaponType) => void;
+  selectedWeapon: WeaponType;
+  onWeaponChange: (weapon: WeaponType) => void;
   isConnecting: boolean;
   error: string | null;
 }
@@ -58,6 +60,8 @@ export const MainMenu: React.FC<MainMenuProps> = ({
   onJoinRoom,
   onAutoJoinRoom,
   onStartPractice,
+  selectedWeapon,
+  onWeaponChange,
   isConnecting,
   error,
 }) => {
@@ -77,7 +81,7 @@ export const MainMenu: React.FC<MainMenuProps> = ({
   const handlePractice = () => {
     if (!playerName.trim() || isConnecting) return;
     audio.playClick();
-    onStartPractice(playerName.trim(), 5, matchDuration, 'assault');
+    onStartPractice(playerName.trim(), 5, matchDuration, selectedWeapon);
   };
 
   const handleCreate = () => {
@@ -115,17 +119,22 @@ export const MainMenu: React.FC<MainMenuProps> = ({
       <div className="lobby-body">
         {/* Left Sidebar */}
         <div className="left-sidebar">
-          <div className="stats-box">
-            <div className="stat-row">
-              <span className="stat-icon gem">💎</span>
-              <span className="stat-value">0</span>
-              <button className="add-btn">+</button>
-            </div>
-            <div className="stat-row">
-              <span className="stat-icon coin">🪙</span>
-              <span className="stat-value">0</span>
-              <button className="add-btn">+</button>
-            </div>
+          <div className="weapon-selector">
+            <div className="weapon-selector-title">Choose Weapon</div>
+            {([
+              ['assault', '🔫', 'Assault Rifle'],
+              ['shotgun', '💥', 'Shotgun'],
+              ['sniper', '🎯', 'Sniper Rifle'],
+            ] as [WeaponType, string, string][]).map(([weapon, icon, label]) => (
+              <button
+                key={weapon}
+                className={`weapon-choice ${selectedWeapon === weapon ? 'selected' : ''}`}
+                onClick={() => { audio.playClick(); onWeaponChange(weapon); }}
+              >
+                <span>{icon}</span>
+                <span>{label}</span>
+              </button>
+            ))}
           </div>
           
           <div className="player-profile">
