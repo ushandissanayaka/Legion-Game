@@ -45,6 +45,7 @@ export class BotPlayer {
   private waypointTimer = 0;
   private yaw: number;
   private model: THREE.Group | null = null;
+  private modelBaseY = 0;
   private fireCooldown = 1.5;
 
   get position(): THREE.Vector3 {
@@ -84,6 +85,7 @@ export class BotPlayer {
 
     loadEnemyModel((model) => {
       this.model = model;
+      this.modelBaseY = model.position.y;
       
       // Tint the model's materials to match bot color
       model.traverse((child) => {
@@ -101,28 +103,6 @@ export class BotPlayer {
       this.mesh.add(model);
     });
 
-    // Nametag sprite
-    const canvas = document.createElement('canvas');
-    canvas.width = 256; canvas.height = 64;
-    const ctx = canvas.getContext('2d')!;
-    ctx.fillStyle = 'rgba(160, 0, 0, 0.85)';
-    ctx.roundRect(4, 4, 248, 56, 8);
-    ctx.fill();
-    ctx.font = 'bold 26px Arial, sans-serif';
-    ctx.fillStyle = '#ffffff';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('BOT · ' + this.name, 128, 32);
-    const sprite = new THREE.Sprite(
-      new THREE.SpriteMaterial({
-        map: new THREE.CanvasTexture(canvas),
-        transparent: true,
-        depthTest: false,
-      }),
-    );
-    sprite.scale.set(2.8, 0.7, 1);
-    sprite.position.y = 2.75;
-    this.mesh.add(sprite);
   }
 
   update(dt: number, colliders: MapCollider[] = []): void {
@@ -164,7 +144,7 @@ export class BotPlayer {
 
     // Walk bob on the whole model instead of just body
     if (this.model) {
-      this.model.position.y = Math.sin(Date.now() * 0.009) * 0.04;
+      this.model.position.y = this.modelBaseY + Math.sin(Date.now() * 0.009) * 0.04;
     }
 
     this.fireCooldown = Math.max(0, this.fireCooldown - dt);

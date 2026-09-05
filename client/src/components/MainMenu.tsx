@@ -4,12 +4,17 @@ import { useGLTF, useAnimations } from '@react-three/drei';
 import * as THREE from 'three';
 import { AudioManager } from '../audio/AudioManager';
 import type { WeaponType } from '../weapons/Weapon';
+import { ENEMY_MODEL_HEIGHT } from '../player/ModelLoader';
 import './MainMenu.css';
 
 function CharacterModel() {
   const { scene, animations } = useGLTF('/low poly soldier 3d model.glb');
   const { actions } = useAnimations(animations, scene);
   const groupRef = useRef<THREE.Group>(null);
+  const bounds = React.useMemo(() => new THREE.Box3().setFromObject(scene), [scene]);
+  const modelHeight = Math.max(bounds.max.y - bounds.min.y, 0.001);
+  const displayScale = ENEMY_MODEL_HEIGHT / modelHeight;
+  const displayY = -((bounds.min.y + bounds.max.y) / 2) * displayScale;
 
   useEffect(() => {
     if (actions) {
@@ -31,7 +36,7 @@ function CharacterModel() {
 
   return (
     <group ref={groupRef}>
-      <primitive object={scene} scale={4.5} position={[0, -3.2, 0]} />
+      <primitive object={scene} scale={displayScale} position={[0, displayY, 0]} />
     </group>
   );
 }
@@ -84,6 +89,7 @@ export const MainMenu: React.FC<MainMenuProps> = ({
   const handleJoin = () => {
     if (!playerName.trim() || !joinRoomId.trim() || isConnecting) return;
     audio.playClick();
+    setShowFriendsMenu(false);
     onJoinRoom(playerName.trim(), joinRoomId.trim().toUpperCase());
   };
 
