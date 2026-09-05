@@ -1,11 +1,47 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Canvas, useFrame } from '@react-three/fiber';
+import { useGLTF, useAnimations } from '@react-three/drei';
+import * as THREE from 'three';
 import { AudioManager } from '../audio/AudioManager';
 import type { WeaponType } from '../weapons/Weapon';
+import './MainMenu.css';
+
+function CharacterModel() {
+  const { scene, animations } = useGLTF('/low poly soldier 3d model.glb');
+  const { actions } = useAnimations(animations, scene);
+  const groupRef = useRef<THREE.Group>(null);
+
+  useEffect(() => {
+    if (actions) {
+      const actionNames = Object.keys(actions);
+      // Play 'Idle' animation or the first one available
+      const actionToPlay = actions['Idle'] || actions[actionNames[0]];
+      if (actionToPlay) {
+        actionToPlay.reset().fadeIn(0.5).play();
+      }
+    }
+  }, [actions]);
+
+  // Clockwise rotation (negative Y axis = clockwise when viewed from above)
+  useFrame((_state, delta) => {
+    if (groupRef.current) {
+      groupRef.current.rotation.y -= delta * 0.6;
+    }
+  });
+
+  return (
+    <group ref={groupRef}>
+      <primitive object={scene} scale={4.5} position={[0, -3.2, 0]} />
+    </group>
+  );
+}
+
 
 interface MainMenuProps {
   audio: AudioManager;
   onCreateRoom: (name: string, duration: number) => void;
   onJoinRoom: (name: string, roomId: string) => void;
+  onAutoJoinRoom?: (name: string, duration: number) => void;
   onStartPractice: (name: string, botCount: number, duration: number, gun: WeaponType) => void;
   isConnecting: boolean;
   error: string | null;
@@ -15,275 +51,205 @@ export const MainMenu: React.FC<MainMenuProps> = ({
   audio,
   onCreateRoom,
   onJoinRoom,
+  onAutoJoinRoom,
   onStartPractice,
   isConnecting,
   error,
 }) => {
-  const [playerName,    setPlayerName]    = useState('');
+  const [playerName, setPlayerName] = useState('Guest' + Math.floor(Math.random() * 1000));
   const [matchDuration, setMatchDuration] = useState(180);
-  const [botCount,      setBotCount]      = useState(5);
-  const [joinRoomId,    setJoinRoomId]    = useState('');
-  const [tab,           setTab]           = useState<'create' | 'join' | 'practice'>('practice');
-  const [selectedGun,   setSelectedGun]   = useState<WeaponType>('assault');
+  const [joinRoomId, setJoinRoomId] = useState('');
+  const [showFriendsMenu, setShowFriendsMenu] = useState(false);
+  
+  const handleAutoJoin = () => {
+    if (!playerName.trim() || isConnecting) return;
+    audio.playClick();
+    if (onAutoJoinRoom) {
+      onAutoJoinRoom(playerName.trim(), matchDuration);
+    }
+  };
+
+  const handlePractice = () => {
+    if (!playerName.trim() || isConnecting) return;
+    audio.playClick();
+    onStartPractice(playerName.trim(), 5, matchDuration, 'assault');
+  };
 
   const handleCreate = () => {
-    if (!playerName.trim()) return;
+    if (!playerName.trim() || isConnecting) return;
     audio.playClick();
     onCreateRoom(playerName.trim(), matchDuration);
   };
 
   const handleJoin = () => {
-    if (!playerName.trim() || !joinRoomId.trim()) return;
+    if (!playerName.trim() || !joinRoomId.trim() || isConnecting) return;
     audio.playClick();
     onJoinRoom(playerName.trim(), joinRoomId.trim().toUpperCase());
   };
 
-  const handlePractice = () => {
-    if (!playerName.trim()) return;
-    audio.playClick();
-    onStartPractice(playerName.trim(), botCount, matchDuration, selectedGun);
-  };
-
-  const handleKey = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      if (tab === 'create')   handleCreate();
-      else if (tab === 'join') handleJoin();
-      else                    handlePractice();
-    }
-  };
-
-  // Shared duration selector
-  const DurationSelect = () => (
-    <div style={{ marginBottom: 16 }}>
-      <label style={{ display: 'block', marginBottom: 8, fontSize: 14, color: 'var(--text-secondary)' }}>
-        Match Duration
-      </label>
-      <select
-        className="input-field"
-        value={matchDuration}
-        onChange={e => setMatchDuration(Number(e.target.value))}
-        style={{ cursor: 'pointer', appearance: 'auto' }}
-      >
-        <option value={60}>1 Minute</option>
-        <option value={120}>2 Minutes</option>
-        <option value={180}>3 Minutes</option>
-        <option value={240}>4 Minutes</option>
-        <option value={300}>5 Minutes</option>
-      </select>
-    </div>
-  );
-
   return (
-    <div className="main-menu">
-      <div className="menu-content">
-
-        {/* Title */}
-        <div className="game-title">
-          <h1>LEGION</h1>
-          <p className="subtitle">3D Multiplayer FPS</p>
-        </div>
-
-        {/* Player Name */}
-        <div className="menu-card">
-          <h2>Your Callsign</h2>
-          <input
-            id="player-name-input"
-            className="input-field"
-            type="text"
-            placeholder="Enter your callsign…"
-            value={playerName}
-            onChange={e => setPlayerName(e.target.value)}
-            onKeyDown={handleKey}
-            maxLength={20}
-            autoFocus
-          />
-        </div>
-
-        {/* Error */}
-        {error && <div className="error-msg">⚠ {error}</div>}
-
-        {/* Tab buttons */}
-        <div style={{ display: 'flex', gap: 8, width: '100%' }}>
-          <button
-            id="tab-practice"
-            className={`btn ${tab === 'practice' ? 'btn-primary' : 'btn-secondary'}`}
-            style={{ flex: 1 }}
-            onClick={() => { setTab('practice'); audio.playClick(); }}
-          >
-            🎯 Practice
-          </button>
-          <button
-            id="tab-create"
-            className={`btn ${tab === 'create' ? 'btn-primary' : 'btn-secondary'}`}
-            style={{ flex: 1 }}
-            onClick={() => { setTab('create'); audio.playClick(); }}
-          >
-            ⚡ Create
-          </button>
-          <button
-            id="tab-join"
-            className={`btn ${tab === 'join' ? 'btn-primary' : 'btn-secondary'}`}
-            style={{ flex: 1 }}
-            onClick={() => { setTab('join'); audio.playClick(); }}
-          >
-            → Join
-          </button>
-        </div>
-
-        {/* ── PRACTICE TAB ──────────────────────────────────── */}
-        {tab === 'practice' && (
-          <div className="menu-card" style={{ marginTop: 0 }}>
-            <h2>Solo Practice Mode</h2>
-            <p style={{ fontFamily: 'var(--font-ui)', fontSize: 14, color: 'var(--text-secondary)', marginBottom: 16 }}>
-              Sharpen your aim against AI bots. No server needed after start.
-            </p>
-
-            {/* Bot Count */}
-            <div style={{ marginBottom: 16 }}>
-              <label style={{ display: 'block', marginBottom: 8, fontSize: 14, color: 'var(--text-secondary)' }}>
-                Number of Bots &nbsp;
-                <span style={{ color: 'var(--accent-primary)', fontWeight: 700, fontSize: 18 }}>
-                  {botCount}
-                </span>
-              </label>
-              <input
-                type="range"
-                min={2} max={10} step={1}
-                value={botCount}
-                onChange={e => setBotCount(Number(e.target.value))}
-                style={{ width: '100%', accentColor: 'var(--accent-primary)', cursor: 'pointer', marginBottom: 8 }}
-              />
-              <div style={{
-                display: 'flex', justifyContent: 'space-between',
-                fontFamily: 'var(--font-ui)', fontSize: 12, color: 'var(--text-muted)',
-              }}>
-                {[2,3,4,5,6,7,8,9,10].map(n => (
-                  <span
-                    key={n}
-                    style={{ cursor: 'pointer', color: n === botCount ? 'var(--accent-primary)' : undefined }}
-                    onClick={() => setBotCount(n)}
-                  >
-                    {n}
-                  </span>
-                ))}
-              </div>
-            </div>
-
-            <DurationSelect />
-
-            {/* Weapon Selection */}
-            <div style={{ marginBottom: 16 }}>
-              <label style={{ display: 'block', marginBottom: 10, fontSize: 14, color: 'var(--text-secondary)' }}>
-                Select Weapon
-              </label>
-              <div style={{ display: 'flex', gap: 8 }}>
-                {([
-                  { id: 'assault' as WeaponType, label: 'Assault Rifle', emoji: '🔫', desc: '25 dmg · Fast' },
-                  { id: 'shotgun' as WeaponType, label: 'Shotgun',       emoji: '💥', desc: '15×8 · Close' },
-                  { id: 'sniper'  as WeaponType, label: 'Sniper',        emoji: '🎯', desc: '100 dmg · Slow' },
-                ] as const).map(g => (
-                  <button
-                    key={g.id}
-                    id={`weapon-${g.id}`}
-                    onClick={() => { setSelectedGun(g.id); audio.playClick(); }}
-                    style={{
-                      flex: 1,
-                      padding: '10px 6px',
-                      borderRadius: 8,
-                      border: selectedGun === g.id
-                        ? '2px solid var(--accent-primary)'
-                        : '2px solid rgba(255,255,255,0.1)',
-                      background: selectedGun === g.id
-                        ? 'rgba(var(--accent-primary-rgb, 255,100,0), 0.15)'
-                        : 'rgba(255,255,255,0.04)',
-                      color: selectedGun === g.id ? 'var(--accent-primary)' : 'var(--text-secondary)',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      gap: 4,
-                      fontFamily: 'var(--font-ui)',
-                      transition: 'all 0.2s',
-                    }}
-                  >
-                    <span style={{ fontSize: 24 }}>{g.emoji}</span>
-                    <span style={{ fontSize: 11, fontWeight: 700 }}>{g.label}</span>
-                    <span style={{ fontSize: 10, opacity: 0.7 }}>{g.desc}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <button
-              id="start-practice-btn"
-              className="btn btn-primary"
-              onClick={handlePractice}
-              disabled={isConnecting || !playerName.trim()}
-            >
-              {isConnecting ? 'Starting…' : '🎯 Start Practice'}
-            </button>
+    <div className="lobby-container">
+      {/* Top Bar */}
+      <div className="top-bar">
+        <div className="top-left"></div>
+        <div className="top-center">
+          <div className="title-banner">
+            <h1>LEGION</h1>
+            <span className="season-text">SEASON 1!</span>
           </div>
-        )}
+        </div>
+        <div className="top-right">
+          <button className="icon-btn">↓</button>
+          <button className="icon-btn">🔄</button>
+          <button className="free-skins-btn">🖌 FREE SKINS</button>
+          <button className="icon-btn">⛶</button>
+        </div>
+      </div>
 
-        {/* ── CREATE TAB ────────────────────────────────────── */}
-        {tab === 'create' && (
-          <div className="menu-card" style={{ marginTop: 0 }}>
-            <h2>Host a New Match</h2>
-            <p style={{ fontFamily: 'var(--font-ui)', fontSize: 14, color: 'var(--text-secondary)', marginBottom: 16 }}>
-              A room code will be generated that you can share with friends.
-            </p>
-
-            <DurationSelect />
-
-            <button
-              id="create-room-btn"
-              className="btn btn-primary"
-              onClick={handleCreate}
-              disabled={isConnecting || !playerName.trim()}
-            >
-              {isConnecting ? 'Connecting…' : '⚡ Create Room'}
-            </button>
+      <div className="lobby-body">
+        {/* Left Sidebar */}
+        <div className="left-sidebar">
+          <div className="stats-box">
+            <div className="stat-row">
+              <span className="stat-icon gem">💎</span>
+              <span className="stat-value">0</span>
+              <button className="add-btn">+</button>
+            </div>
+            <div className="stat-row">
+              <span className="stat-icon coin">🪙</span>
+              <span className="stat-value">0</span>
+              <button className="add-btn">+</button>
+            </div>
           </div>
-        )}
-
-        {/* ── JOIN TAB ──────────────────────────────────────── */}
-        {tab === 'join' && (
-          <div className="menu-card" style={{ marginTop: 0 }}>
-            <h2>Join Existing Room</h2>
-            <input
-              id="room-id-input"
-              className="input-field"
-              type="text"
-              placeholder="Enter Room Code (e.g. A7K92)"
-              value={joinRoomId}
-              onChange={e => setJoinRoomId(e.target.value.toUpperCase())}
-              onKeyDown={handleKey}
-              maxLength={5}
+          
+          <div className="player-profile">
+            <div className="nickname-label">Nickname</div>
+            <input 
+              className="nickname-input"
+              value={playerName}
+              onChange={(e) => setPlayerName(e.target.value)}
+              placeholder="Enter Name"
             />
-            <button
-              id="join-room-btn"
-              className="btn btn-primary"
-              onClick={handleJoin}
-              disabled={isConnecting || !playerName.trim() || !joinRoomId.trim()}
-            >
-              {isConnecting ? 'Joining…' : '→ Join Room'}
-            </button>
           </div>
-        )}
 
-        {/* Controls reference */}
-        <div className="menu-card" style={{ marginTop: 0 }}>
-          <h2>Controls</h2>
-          <div className="controls-info">
-            <span className="key">WASD</span><span className="action">Move</span>
-            <span className="key">Mouse</span><span className="action">Aim</span>
-            <span className="key">Left Click</span><span className="action">Shoot</span>
-            <span className="key">Shift</span><span className="action">Sprint</span>
-            <span className="key">Tab</span><span className="action">Scoreboard</span>
-            <span className="key">R</span><span className="action">Reload</span>
+          <div className="menu-buttons">
+            <button className="menu-btn bg-cyan">🚩 Missions</button>
+            <button className="menu-btn bg-orange">🎫 Poxel Pass</button>
+            <button className="menu-btn bg-green">🏪 Shop</button>
+            <button className="menu-btn bg-blue">🎛 Inventory</button>
+            <button className="menu-btn bg-purple">🏆 Leaders</button>
+            <button className="menu-btn bg-yellow">🛡 Clans</button>
+            <button className="menu-btn bg-navy">🏠 Servers</button>
           </div>
         </div>
 
+        {/* Center Content */}
+        <div className="center-content">
+          <div className="character-display">
+            {/* Camera: pulled back further, positioned higher to frame full body */}
+            <Canvas camera={{ position: [0, 1.2, 6.5], fov: 40 }}>
+              <ambientLight intensity={1.2} />
+              <directionalLight position={[5, 10, 5]} intensity={2.5} />
+              <directionalLight position={[-5, 5, -5]} intensity={0.8} />
+              <React.Suspense fallback={null}>
+                <CharacterModel />
+              </React.Suspense>
+            </Canvas>
+          </div>
+
+          <div className="play-actions">
+            {error && <div className="error-tooltip">{error}</div>}
+            <button 
+              className={`btn-play-huge ${isConnecting ? 'loading' : ''}`}
+              onClick={handleAutoJoin}
+              disabled={isConnecting}
+            >
+              <div className="play-text">{isConnecting ? 'JOINING...' : 'PLAY'}</div>
+              <div className="play-subtext">{isConnecting ? 'Please wait' : 'Multiplayer'}</div>
+            </button>
+            <button 
+              className="btn-practice"
+              onClick={handlePractice}
+              disabled={isConnecting}
+            >
+              🔫 PRACTICE MODE
+            </button>
+          </div>
+        </div>
+
+        {/* Right Sidebar */}
+        <div className="right-sidebar">
+          {showFriendsMenu ? (
+            <div className="friends-menu">
+              <h3 style={{ color: 'white', margin: 0, fontSize: '1.4rem', textAlign: 'center', borderBottom: '2px solid #333', paddingBottom: '12px' }}>🎮 Play With Friends</h3>
+              
+              <div style={{ background: '#111', padding: '14px', borderRadius: '10px' }}>
+                <label style={{ color: '#aaa', fontSize: '0.85rem', display: 'block', marginBottom: '8px', fontWeight: 'bold', textTransform: 'uppercase' }}>Match Duration</label>
+                <select 
+                  style={{ width: '100%', padding: '10px', background: '#222', color: 'white', border: '1px solid #555', borderRadius: '6px', fontSize: '1rem' }}
+                  value={matchDuration} 
+                  onChange={e => setMatchDuration(Number(e.target.value))}
+                >
+                  <option value={60}>1 Minute</option>
+                  <option value={120}>2 Minutes</option>
+                  <option value={180}>3 Minutes</option>
+                  <option value={240}>4 Minutes</option>
+                  <option value={300}>5 Minutes</option>
+                </select>
+                <button 
+                  style={{ width: '100%', marginTop: '12px', padding: '14px', background: '#4caf50', border: '3px solid #2e7d32', borderRadius: '8px', color: 'white', fontWeight: 'bold', cursor: 'pointer', fontSize: '1.1rem', boxShadow: '0 4px 0 #1b5e20' }}
+                  onClick={handleCreate}
+                  disabled={isConnecting || !playerName.trim()}
+                >
+                  {isConnecting ? '...' : '⚡ Create Room'}
+                </button>
+              </div>
+
+              <div style={{ background: '#111', padding: '14px', borderRadius: '10px' }}>
+                <label style={{ color: '#aaa', fontSize: '0.85rem', display: 'block', marginBottom: '8px', fontWeight: 'bold', textTransform: 'uppercase' }}>Join by Room Code</label>
+                <input 
+                  style={{ width: '100%', padding: '12px', background: '#222', color: 'white', border: '1px solid #555', borderRadius: '6px', marginBottom: '12px', fontSize: '1.1rem', letterSpacing: '3px', textAlign: 'center', boxSizing: 'border-box' }}
+                  placeholder="XXXXX"
+                  value={joinRoomId}
+                  onChange={e => setJoinRoomId(e.target.value.toUpperCase())}
+                  maxLength={5}
+                />
+                <button 
+                  style={{ width: '100%', padding: '14px', background: '#2196f3', border: '3px solid #1565c0', borderRadius: '8px', color: 'white', fontWeight: 'bold', cursor: 'pointer', fontSize: '1.1rem', boxShadow: '0 4px 0 #0d47a1' }}
+                  onClick={handleJoin}
+                  disabled={isConnecting || !playerName.trim() || !joinRoomId.trim()}
+                >
+                  {isConnecting ? '...' : '→ Join Room'}
+                </button>
+              </div>
+
+              <button 
+                style={{ marginTop: 'auto', padding: '12px', background: 'rgba(255,255,255,0.05)', border: '1px solid #555', color: '#ccc', borderRadius: '8px', cursor: 'pointer', fontSize: '1rem' }}
+                onClick={() => setShowFriendsMenu(false)}
+              >
+                ✕ Close
+              </button>
+            </div>
+          ) : (
+            <div className="ad-banner">
+              <div className="ad-title">LEGION AD</div>
+              <div className="ad-content">PLAY FOR FREE</div>
+            </div>
+          )}
+
+          <div className="social-buttons">
+            <button className="social-btn" onClick={() => {
+              audio.playClick();
+              setShowFriendsMenu(prev => !prev);
+            }}>
+              👥 Join/Create<br/><small>Play With Friends</small>
+            </button>
+            <div className="small-socials">
+              <button className="icon-btn">⚙</button>
+              <button className="icon-btn">👾</button>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
