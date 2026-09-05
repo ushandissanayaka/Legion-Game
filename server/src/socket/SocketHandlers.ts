@@ -6,7 +6,10 @@ import {
   PLAYER_HITBOX_RADIUS,
   NETWORK_LAG_TOLERANCE_MS,
   GameStateEnum,
+  MAX_PLAYERS_PER_ROOM,
 } from '../types/game';
+
+const AUTO_MATCHMAKING_WINDOW_MS = 5000;
 
 // Simple 3D vector helper
 function vec3Length(v: { x: number; y: number; z: number }): number {
@@ -127,7 +130,8 @@ export function registerSocketHandlers(
 
       // Find an available room
       for (const room of rooms) {
-        if (room.playerCount < 10 && room.gameState === GameStateEnum.LOBBY) { // assuming max 10
+        if (room.playerCount < MAX_PLAYERS_PER_ROOM &&
+          (room.gameState === GameStateEnum.LOBBY || room.gameState === GameStateEnum.PLAYING)) {
           joinedRoom = room;
           break;
         }
@@ -138,6 +142,10 @@ export function registerSocketHandlers(
         const spawnIndex = joinedRoom.playerCount;
         const player = playerManager.createPlayer(socket.id, playerName, joinedRoom.id, spawnIndex, false);
         joinedRoom.addPlayer(player);
+        if (joinedRoom.gameState === GameStateEnum.PLAYING) {
+          const position = playerManager.respawnPlayer(player.id, spawnIndex);
+          if (position) player.position = position;
+        }
         socket.join(joinedRoom.id);
 
         socket.emit(SOCKET_EVENTS.ROOM_JOINED, { player, room: joinedRoom.getRoomState() });
@@ -145,6 +153,9 @@ export function registerSocketHandlers(
           player,
           room: joinedRoom.getRoomState(),
         });
+        if (joinedRoom.gameState === GameStateEnum.LOBBY) {
+          setTimeout(() => joinedRoom?.startCountdown(), AUTO_MATCHMAKING_WINDOW_MS);
+        }
         console.log(`[Room] ${playerName} auto-joined room ${joinedRoom.id} (${joinedRoom.playerCount} players)`);
       } else {
         // Create new room
@@ -158,6 +169,7 @@ export function registerSocketHandlers(
           player,
           room: newRoom.getRoomState(),
         });
+        setTimeout(() => newRoom.startCountdown(), AUTO_MATCHMAKING_WINDOW_MS);
         console.log(`[Room] ${playerName} auto-created room ${newRoom.id}`);
       }
     } catch (err) {

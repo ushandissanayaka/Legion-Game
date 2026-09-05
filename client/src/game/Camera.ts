@@ -66,7 +66,7 @@ export class Camera {
   /** Get right direction vector */
   getRightXZ(): THREE.Vector3 {
     const fwd = this.getForwardXZ();
-    return new THREE.Vector3(fwd.z, 0, -fwd.x);
+    return new THREE.Vector3(-fwd.z, 0, fwd.x);
   }
 
   /** Get the full 3D look direction (for raycasting) */

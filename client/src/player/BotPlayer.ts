@@ -16,6 +16,10 @@ const BOT_COLORS = [
   0x2299cc, 0x22cc55, 0xcc5522, 0x9922cc, 0x88cc11, 0xcc1155,
 ];
 
+const BOT_SPAWN_POSITIONS: [number, number][] = [
+  [-26, -8], [26, -8], [-26, 8], [26, 8], [0, -28],
+];
+
 // Fixed patrol points spread around the arena
 const PATROL_POINTS: [number, number][] = [
   [-20, -20], [20, -20], [-20, 20], [20, 20],
@@ -58,12 +62,8 @@ export class BotPlayer {
     this.speed = 2.0 + Math.random() * 2.0;
     this.yaw = Math.random() * Math.PI * 2;
 
-    // Spread bots around map corners/sides
-    const angle = (index / 10) * Math.PI * 2 + Math.random() * 0.6;
-    const r = 6 + (index % 5) * 4 + Math.random() * 2;
-    this.pos = new THREE.Vector3(
-      Math.cos(angle) * r, 0, Math.sin(angle) * r,
-    );
+    const [spawnX, spawnZ] = BOT_SPAWN_POSITIONS[index % BOT_SPAWN_POSITIONS.length];
+    this.pos = new THREE.Vector3(spawnX, 0, spawnZ);
     this.waypoint = this.pickWaypoint();
     this.mesh = new THREE.Group();
     this.buildMesh(index);

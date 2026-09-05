@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.registerSocketHandlers = registerSocketHandlers;
 const game_1 = require("../types/game");
+const AUTO_MATCHMAKING_WINDOW_MS = 5000;
 // Simple 3D vector helper
 function vec3Length(v) {
     return Math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
@@ -81,6 +82,67 @@ function registerSocketHandlers(io, socket, gameManager, playerManager) {
         catch (err) {
             console.error('joinRoom error:', err);
             socket.emit(game_1.SOCKET_EVENTS.ERROR, { message: 'Failed to join room', code: 'SERVER_ERROR' });
+        }
+    });
+    // ──────────────────────────────────────────────────────────
+    // AUTO JOIN ROOM
+    // ──────────────────────────────────────────────────────────
+    socket.on(game_1.SOCKET_EVENTS.AUTO_JOIN_ROOM, (payload) => {
+        try {
+            const { playerName, matchDuration } = payload;
+            if (!playerName?.trim()) {
+                socket.emit(game_1.SOCKET_EVENTS.ERROR, { message: 'Player name required', code: 'INVALID_NAME' });
+                return;
+            }
+            const rooms = gameManager.getAllRooms();
+            let joinedRoom = null;
+            // Find an available room
+            for (const room of rooms) {
+                if (room.playerCount < game_1.MAX_PLAYERS_PER_ROOM &&
+                    (room.gameState === game_1.GameStateEnum.LOBBY || room.gameState === game_1.GameStateEnum.PLAYING)) {
+                    joinedRoom = room;
+                    break;
+                }
+            }
+            if (joinedRoom) {
+                // Join existing room
+                const spawnIndex = joinedRoom.playerCount;
+                const player = playerManager.createPlayer(socket.id, playerName, joinedRoom.id, spawnIndex, false);
+                joinedRoom.addPlayer(player);
+                if (joinedRoom.gameState === game_1.GameStateEnum.PLAYING) {
+                    const position = playerManager.respawnPlayer(player.id, spawnIndex);
+                    if (position)
+                        player.position = position;
+                }
+                socket.join(joinedRoom.id);
+                socket.emit(game_1.SOCKET_EVENTS.ROOM_JOINED, { player, room: joinedRoom.getRoomState() });
+                socket.to(joinedRoom.id).emit(game_1.SOCKET_EVENTS.PLAYER_JOINED, {
+                    player,
+                    room: joinedRoom.getRoomState(),
+                });
+                if (joinedRoom.gameState === game_1.GameStateEnum.LOBBY) {
+                    setTimeout(() => joinedRoom?.startCountdown(), AUTO_MATCHMAKING_WINDOW_MS);
+                }
+                console.log(`[Room] ${playerName} auto-joined room ${joinedRoom.id} (${joinedRoom.playerCount} players)`);
+            }
+            else {
+                // Create new room
+                const newRoom = gameManager.createRoom(socket.id, matchDuration);
+                const player = playerManager.createPlayer(socket.id, playerName, newRoom.id, 0, true);
+                newRoom.addPlayer(player);
+                socket.join(newRoom.id);
+                socket.emit(game_1.SOCKET_EVENTS.ROOM_CREATED, {
+                    roomId: newRoom.id,
+                    player,
+                    room: newRoom.getRoomState(),
+                });
+                setTimeout(() => newRoom.startCountdown(), AUTO_MATCHMAKING_WINDOW_MS);
+                console.log(`[Room] ${playerName} auto-created room ${newRoom.id}`);
+            }
+        }
+        catch (err) {
+            console.error('autoJoinRoom error:', err);
+            socket.emit(game_1.SOCKET_EVENTS.ERROR, { message: 'Failed to auto-join room', code: 'SERVER_ERROR' });
         }
     });
     // ──────────────────────────────────────────────────────────

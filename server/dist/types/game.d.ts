@@ -47,6 +47,7 @@ export interface ShootEvent {
 export declare const SOCKET_EVENTS: {
     readonly CREATE_ROOM: 'createRoom';
     readonly JOIN_ROOM: 'joinRoom';
+    readonly AUTO_JOIN_ROOM: 'autoJoinRoom';
     readonly LEAVE_ROOM: 'leaveRoom';
     readonly PLAYER_MOVE: 'playerMove';
     readonly PLAYER_SHOOT: 'playerShoot';

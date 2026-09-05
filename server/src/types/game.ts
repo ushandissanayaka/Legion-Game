@@ -58,6 +58,7 @@ export interface ShootEvent {
 export const SOCKET_EVENTS = {
   CREATE_ROOM: 'createRoom',
   JOIN_ROOM: 'joinRoom',
+  AUTO_JOIN_ROOM: 'autoJoinRoom',
   LEAVE_ROOM: 'leaveRoom',
   PLAYER_MOVE: 'playerMove',
   PLAYER_SHOOT: 'playerShoot',
@@ -80,12 +81,12 @@ export const SOCKET_EVENTS = {
   COUNTDOWN_TICK: 'countdownTick',
 } as const;
 
-// Spawn positions for the map (4 corners)
+// Spawn positions for the map (four distinct positions in clear open lanes)
 export const SPAWN_POSITIONS: Vector3Data[] = [
-  { x: -28, y: 0, z: -28 },
-  { x:  28, y: 0, z: -28 },
-  { x: -28, y: 0, z:  28 },
-  { x:  28, y: 0, z:  28 },
+  { x:  0, y: 0, z: -14 },
+  { x:  0, y: 0, z:  14 },
+  { x: -14, y: 0, z:  0 },
+  { x:  14, y: 0, z:  0 },
 ];
 
 export const WEAPON_DAMAGE = 25;

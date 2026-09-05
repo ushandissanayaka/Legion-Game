@@ -27,6 +27,7 @@ export class PlayerControls {
   constructor() {
     this.onKeyDown = (e: KeyboardEvent) => {
       this.keys[e.code] = true;
+      this.keys[e.key.toLowerCase()] = true;
       if (e.code === 'Space' && !e.repeat) this.jumpPressed = true;
       this.tabPressed = e.code === 'Tab' || e.key === 'Tab';
       if (['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowLeft', 'ArrowDown', 'ArrowRight', 'Space', 'Tab'].includes(e.code)) {
@@ -35,6 +36,7 @@ export class PlayerControls {
     };
     this.onKeyUp = (e: KeyboardEvent) => {
       this.keys[e.code] = false;
+      this.keys[e.key.toLowerCase()] = false;
       if (e.code === 'Tab' || e.key === 'Tab') this.tabPressed = false;
     };
     this.onMouseMove = (e: MouseEvent) => {
@@ -73,8 +75,8 @@ export class PlayerControls {
       this.jumpPressed = false;
     };
 
-    document.addEventListener('keydown', this.onKeyDown);
-    document.addEventListener('keyup', this.onKeyUp);
+    window.addEventListener('keydown', this.onKeyDown, true);
+    window.addEventListener('keyup', this.onKeyUp, true);
     document.addEventListener('mousemove', this.onMouseMove);
     document.addEventListener('mousedown', this.onMouseDown);
     document.addEventListener('mouseup', this.onMouseUp);
@@ -104,8 +106,8 @@ export class PlayerControls {
   }
 
   dispose(): void {
-    document.removeEventListener('keydown', this.onKeyDown);
-    document.removeEventListener('keyup', this.onKeyUp);
+    window.removeEventListener('keydown', this.onKeyDown, true);
+    window.removeEventListener('keyup', this.onKeyUp, true);
     document.removeEventListener('mousemove', this.onMouseMove);
     document.removeEventListener('mousedown', this.onMouseDown);
     document.removeEventListener('mouseup', this.onMouseUp);

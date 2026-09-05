@@ -7,7 +7,8 @@ let cachedEnemyModel: THREE.Group | null = null;
 const loader = new GLTFLoader();
 
 const ENEMY_MODEL_URL = '/low%20poly%20soldier%203d%20model.glb';
-export const ENEMY_MODEL_HEIGHT = 4.0;
+export const ENEMY_MODEL_HEIGHT = 3.2;
+const GAME_ENEMY_MODEL_HEIGHT = 2.6;
 
 export function loadPlayerModel(callback: (model: THREE.Group) => void) {
   if (cachedPlayerModel) {
@@ -54,7 +55,7 @@ export function loadEnemyModel(callback: (model: THREE.Group) => void) {
     const bounds = new THREE.Box3().setFromObject(model);
     const height = bounds.max.y - bounds.min.y;
     if (height > 0) {
-      model.scale.setScalar(ENEMY_MODEL_HEIGHT / height);
+      model.scale.setScalar(GAME_ENEMY_MODEL_HEIGHT / height);
     }
     model.position.y = -bounds.min.y * model.scale.y;
     model.rotation.y = Math.PI;

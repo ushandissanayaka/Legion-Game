@@ -10,12 +10,12 @@ export interface MapCollider {
   max: THREE.Vector3;
 }
 
-// 4 spawn positions in the open corner areas, outside buildings
+// 4 distinct spawn positions in clear open lanes
 export const SPAWN_POSITIONS = [
-  new THREE.Vector3(-28, 0, -28),
-  new THREE.Vector3( 28, 0, -28),
-  new THREE.Vector3(-28, 0,  28),
-  new THREE.Vector3( 28, 0,  28),
+  new THREE.Vector3( 0, 0, -14),
+  new THREE.Vector3( 0, 0,  14),
+  new THREE.Vector3(-14, 0,  0),
+  new THREE.Vector3( 14, 0,  0),
 ];
 
 export class GameMap {

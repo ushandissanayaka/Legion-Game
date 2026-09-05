@@ -64,6 +64,7 @@ export default function App() {
   const socketRef = useRef<Socket | null>(null);
   const spawnIndexRef = useRef(0);
   const practiceAutoStartRef = useRef(false);
+  const autoJoinPendingRef = useRef(false);
   const matchStatsRef = useRef({ kills: 0, deaths: 0 });
 
   // ── Socket setup ──────────────────────────────────────────
@@ -88,10 +89,12 @@ export default function App() {
     // ── Room events ─────────────────────────────────────────
 
     socket.on(SOCKET_EVENTS.ROOM_CREATED, ({ player, room: r }: { player: PlayerState; room: RoomState }) => {
+      const isAutoJoin = autoJoinPendingRef.current;
+      autoJoinPendingRef.current = false;
       setLocalPlayer(player);
       setRoom(r);
       spawnIndexRef.current = 0;
-      setAppState('LOBBY');
+      if (!isAutoJoin) setAppState('LOBBY');
       setIsConnecting(false);
 
       if (practiceAutoStartRef.current) {
@@ -101,10 +104,17 @@ export default function App() {
     });
 
     socket.on(SOCKET_EVENTS.ROOM_JOINED, ({ player, room: r }: { player: PlayerState; room: RoomState }) => {
+      const isAutoJoin = autoJoinPendingRef.current;
+      autoJoinPendingRef.current = false;
       setLocalPlayer(player);
       setRoom(r);
       spawnIndexRef.current = r.players.findIndex(p => p.id === player.id);
-      setAppState('LOBBY');
+      if (isAutoJoin && r.gameState === 'PLAYING') {
+        setCountdown(0);
+        setAppState('COUNTDOWN');
+      } else if (!isAutoJoin) {
+        setAppState('LOBBY');
+      }
       setIsConnecting(false);
     });
 
@@ -320,6 +330,16 @@ export default function App() {
     socket.emit(SOCKET_EVENTS.JOIN_ROOM, { roomId, playerName: name });
   };
 
+  const handleAutoJoinRoom = (name: string, duration: number) => {
+    setError(null);
+    setIsConnecting(true);
+    setBotCount(0);
+    autoJoinPendingRef.current = true;
+    const socket = connectSocket();
+    socketRef.current = socket;
+    socket.emit(SOCKET_EVENTS.AUTO_JOIN_ROOM, { playerName: name, matchDuration: duration });
+  };
+
   const handleLeaveRoom = () => {
     if (room && socketRef.current) {
       socketRef.current.emit(SOCKET_EVENTS.LEAVE_ROOM, { roomId: room.id });
@@ -389,6 +409,7 @@ export default function App() {
             audio={audioRef.current}
             onCreateRoom={handleCreateRoom}
             onJoinRoom={handleJoinRoom}
+            onAutoJoinRoom={handleAutoJoinRoom}
             onStartPractice={handleStartPractice}
             isConnecting={isConnecting}
             error={error}
