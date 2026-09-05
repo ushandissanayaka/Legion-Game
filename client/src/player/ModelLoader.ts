@@ -7,6 +7,7 @@ let cachedEnemyModel: THREE.Group | null = null;
 const loader = new GLTFLoader();
 
 const ENEMY_MODEL_URL = '/low%20poly%20soldier%203d%20model.glb';
+export const ENEMY_MODEL_HEIGHT = 4.0;
 
 export function loadPlayerModel(callback: (model: THREE.Group) => void) {
   if (cachedPlayerModel) {
@@ -24,8 +25,14 @@ export function loadPlayerModel(callback: (model: THREE.Group) => void) {
     
     model.traverse((child) => {
       if ((child as THREE.Mesh).isMesh) {
-        child.castShadow = true;
-        child.receiveShadow = true;
+        const mesh = child as THREE.Mesh;
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        if (Array.isArray(mesh.material)) {
+          mesh.material.forEach(material => { material.side = THREE.DoubleSide; });
+        } else {
+          mesh.material.side = THREE.DoubleSide;
+        }
       }
     });
 
@@ -47,15 +54,21 @@ export function loadEnemyModel(callback: (model: THREE.Group) => void) {
     const bounds = new THREE.Box3().setFromObject(model);
     const height = bounds.max.y - bounds.min.y;
     if (height > 0) {
-      model.scale.setScalar(1.8 / height);
+      model.scale.setScalar(ENEMY_MODEL_HEIGHT / height);
     }
     model.position.y = -bounds.min.y * model.scale.y;
     model.rotation.y = Math.PI;
 
     model.traverse((child) => {
       if ((child as THREE.Mesh).isMesh) {
-        child.castShadow = true;
-        child.receiveShadow = true;
+        const mesh = child as THREE.Mesh;
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        if (Array.isArray(mesh.material)) {
+          mesh.material.forEach(material => { material.side = THREE.DoubleSide; });
+        } else {
+          mesh.material.side = THREE.DoubleSide;
+        }
       }
     });
 
